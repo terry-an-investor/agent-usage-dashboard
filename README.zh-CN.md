@@ -6,7 +6,7 @@ Kimi Code token 用量本地仪表盘 —— 读取本机会话日志，聚合�
 
 所有数据都在本地处理，不上传任何东西。
 
-![仪表盘截图](docs/screenshot-full.png)
+![仪表盘截图](docs/screenshot-zh.png)
 
 ## 功能
 
