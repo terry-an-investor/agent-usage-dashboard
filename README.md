@@ -1,49 +1,59 @@
 # kimi-usage-dashboard
 
-Kimi Code token 用量本地仪表盘 —— 读取本机会话日志，聚合并可视化你的 token 消耗与活跃度。
+**English** | [简体中文](README.zh-CN.md)
 
-所有数据都在本地处理，不上传任何东西。
+A local dashboard for Kimi Code token usage — reads your local session logs, aggregates them, and visualizes your token consumption and activity.
 
-## 功能
+All data is processed locally. Nothing is uploaded anywhere.
 
-- **顶部统计条**：范围内 tokens、单日峰值、平均每日、活跃天数、最长连续
-- **Token 活跃度热力图**：最近一年，GitHub 风格
-- **指标卡片**：活跃度 / Token / Cache 命中率等
-- **每日 Token 构成**：堆叠柱状图（新输入 / 输出 / 缓存读取 / 缓存写入），可按模型筛选
-- **模型用量表**：按总 token 排序，含按官方 API 价的估算成本
-- **按月汇总** 与 **API 定价参考**
-- **时间范围筛选**：今日 / 近 7 日 / 近 14 日 / 近 30 日 / 全部 / 自定义区间；刷新数据后保持所选范围（通过 URL 参数恢复）
+## Features
 
-## 快速开始
+- **Top stat strip**: tokens in range, peak day, daily average, active days, longest streak
+- **Activity heatmap**: GitHub-style, trailing one year
+- **Metric cards**: activity / token / cache hit rate and more
+- **Daily token breakdown**: stacked bar chart (fresh input / output / cache read / cache write), filterable by model
+- **Per-model usage table**: sorted by total tokens, with cost estimated at official API prices
+- **Monthly summary** and **API pricing reference**
+- **Time range filter**: today / last 7 / 14 / 30 days / all time / custom range; the selected range survives data refresh (restored via URL params)
+
+## Requirements
+
+- **Node.js** (with npm) — needed to install the `ccusage` dependency, and `refresh.sh` runs on node
+- **Python 3** — for the local server `serve.py` (standard library only, nothing to pip install)
+- **Kimi Code** installed with some session history (data comes from `~/.kimi-code/sessions/**/wire.jsonl`)
+
+## Quick Start
 
 ```bash
-npm install   # 安装本地固定的 ccusage（数据聚合用）
-./start.sh    # 启动本地服务（127.0.0.1:8931）并打开页面
+npm install   # installs the ccusage dependency (pinned locally, offline mode, no registry lookups)
+./start.sh    # starts the local server (127.0.0.1:8931) and opens the page
 ```
 
-页面上的「刷新数据」按钮会调用 `refresh.sh` 重新聚合最新日志并刷新页面；也可以手动执行：
+The "刷新数据" (refresh) button on the page calls `refresh.sh` to re-aggregate the latest logs and reload; you can also run it manually:
 
 ```bash
 ./refresh.sh
 ```
 
-## 工作原理
+> If you skip `npm install`, `refresh.sh` will fail because `node_modules/.bin/ccusage` does not exist.
 
-1. 数据来自本机 `~/.kimi-code/sessions/**/wire.jsonl` 中服务器返回的真实 token 计数；
-2. `refresh.sh` 用 [ccusage](https://github.com/ryoppippi/ccusage)（本地固定版本，离线模式）聚合出 daily / monthly / session 三份 JSON，合并写入 `data.js`；
-3. `serve.py` 托管页面并提供 `/refresh` 接口（页面上「刷新数据」按钮背后调用的就是它）；
-4. `index.html` 纯前端渲染，无框架、无构建步骤。
+## How It Works
 
-> `data.js` 是你个人的用量数据，已被 `.gitignore` 排除，不会提交到仓库。
+1. Data comes from the real token counts returned by the server in your local `~/.kimi-code/sessions/**/wire.jsonl` files;
+2. `refresh.sh` uses [ccusage](https://github.com/ryoppippi/ccusage) (pinned local version, offline mode) to aggregate daily / monthly / session JSON, merged into `data.js`;
+3. `serve.py` serves the page and exposes the `/refresh` endpoint (what the refresh button calls);
+4. `index.html` renders everything in pure front-end JS — no framework, no build step.
 
-## 文件说明
+> `data.js` is your personal usage data. It is excluded by `.gitignore` and never committed.
 
-| 文件 | 作用 |
+## Files
+
+| File | Purpose |
 | --- | --- |
-| `index.html` | 仪表盘页面（样式 + 渲染逻辑全在里面） |
-| `serve.py` | 本地服务：托管静态文件 + `/refresh` 接口 |
-| `refresh.sh` | 调用 ccusage 聚合日志，重建 `data.js` |
-| `start.sh` | 启动服务并打开浏览器（重复执行安全） |
+| `index.html` | The dashboard page (styles + rendering logic, all in one file) |
+| `serve.py` | Local server: static hosting + `/refresh` endpoint |
+| `refresh.sh` | Aggregates logs via ccusage and rebuilds `data.js` |
+| `start.sh` | Starts the server and opens the browser (safe to re-run) |
 
 ## License
 
