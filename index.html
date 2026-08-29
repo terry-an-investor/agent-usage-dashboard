@@ -699,16 +699,20 @@
     const days = [];
     for (let d = new Date(rangeStart); d <= new Date(rangeEnd); d.setDate(d.getDate() + 1)) days.push(iso(d));
 
-    const W = 640, H = 220, padL = 62, padB = 26, padT = 8;
-    const plotW = W - padL - 8, plotH = H - padB - padT;
+    const W = 640, H = 220, padL = 62, padR = 56, padB = 26, padT = 8;
+    const plotW = W - padL - padR, plotH = H - padB - padT;
     const maxV = Math.max(...days.map(ds => (dayRec(ds) || {}).totalTokens || 0), 1);
+    // 右轴：费用次坐标轴，刻度按范围内单日最高估算成本等比映射（精确费用见悬浮提示）
+    const dayCostOf = rec => !rec ? 0 : (rec.cost != null ? rec.cost : sum(rec.modelBreakdowns || [], costOf));
+    const maxCost = Math.max(...days.map(ds => dayCostOf(dayRec(ds))), 0);
     const bw = plotW / days.length;
     const labelStep = Math.max(1, Math.ceil(days.length / 12));
     let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet">`;
     [0.25, 0.5, 0.75, 1].forEach(f => {
       const y = padT + plotH * (1 - f);
-      svg += `<line class="grid-line" x1="${padL}" y1="${y}" x2="${W - 8}" y2="${y}"/>`;
+      svg += `<line class="grid-line" x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}"/>`;
       svg += `<text class="axis" x="${padL - 6}" y="${y + 3}" text-anchor="end">${fmt(Math.round(maxV * f))}</text>`;
+      svg += `<text class="axis" x="${W - padR + 6}" y="${y + 3}" text-anchor="start">${fmtCost(maxCost * f)}</text>`;
     });
     days.forEach((ds, i) => {
       const rec = dayRec(ds);
@@ -726,7 +730,7 @@
         svg += `<text class="axis" x="${x + w / 2}" y="${H - 8}" text-anchor="middle">${ds.slice(5)}</text>`;
       }
     });
-    svg += `<line x1="${padL}" y1="${padT + plotH}" x2="${W - 8}" y2="${padT + plotH}" style="stroke:#dcdce0"/>`;
+    svg += `<line x1="${padL}" y1="${padT + plotH}" x2="${W - padR}" y2="${padT + plotH}" style="stroke:#dcdce0"/>`;
     svg += '</svg>';
     document.getElementById('bars').innerHTML = svg;
   }
