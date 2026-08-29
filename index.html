@@ -208,8 +208,14 @@
 
   <div class="card">
     <div class="card-head">
-      <h2>Token 活跃度</h2>
-      <span class="range" id="heatRange"></span>
+      <h2 id="heatTitle">Token 活跃度</h2>
+      <div class="head-right">
+        <div class="tabs" id="heatMetricTabs">
+          <button data-m="tokens" class="on">Token</button>
+          <button data-m="cost">费用</button>
+        </div>
+        <span class="range" id="heatRange"></span>
+      </div>
     </div>
     <div class="heat-scroll"><div id="heatmap"></div></div>
     <div class="heat-legend">少 <span id="legendSw"></span> 多</div>
@@ -422,10 +428,15 @@
       weeks.push(wk);
     }
   }
-  const maxT = Math.max(...daily.map(d => d.totalTokens));
-  function heatColor(t) {
-    if (!t) return HEAT[0];
-    const r = t / maxT;
+  // 计量单位：tokens / cost（估算费用，按官方 API 价折算）
+  let heatMetric = 'tokens';
+  const dayCost = rec => rec ? sum(rec.modelBreakdowns || [], costOf) : 0;
+  const heatVal = rec => heatMetric === 'cost' ? dayCost(rec) : (rec ? rec.totalTokens : 0);
+  const maxT = Math.max(...daily.map(d => d.totalTokens), 1);
+  const maxC = Math.max(...daily.map(dayCost), 1e-9);
+  function heatColor(v) {
+    if (!v) return HEAT[0];
+    const r = v / (heatMetric === 'cost' ? maxC : maxT);
     return HEAT[r < 0.15 ? 1 : r < 0.35 ? 2 : r < 0.65 ? 3 : 4];
   }
   let labels = '', lastM = '', lastLabelIdx = -99;
@@ -437,27 +448,38 @@
     }
     else labels += '<span></span>';
   });
-  let heatHtml = '';
-  weeks.forEach(wk => {
-    heatHtml += '<div class="wk">';
-    wk.forEach(ds => {
-      if (!ds) { heatHtml += '<div class="d" style="visibility:hidden"></div>'; return; }
-      const rec = byDate[ds]; // 热力图固定按全天总量，不随柱状图的模型筛选变化（否则颜色和 tooltip 口径不一致）
-      const t = rec ? rec.totalTokens : 0;
-      heatHtml += `<div class="d" data-d="${ds}" data-t="${t}" style="background:${heatColor(t)}"></div>`;
-    });
-    heatHtml += '</div>';
-  });
   const heatEl = document.getElementById('heatmap');
-  heatEl.innerHTML = `<div class="month-labels">${labels}</div><div class="heat">${heatHtml}</div>`;
+  function renderHeat() {
+    let heatHtml = '';
+    weeks.forEach(wk => {
+      heatHtml += '<div class="wk">';
+      wk.forEach(ds => {
+        if (!ds) { heatHtml += '<div class="d" style="visibility:hidden"></div>'; return; }
+        const rec = byDate[ds]; // 热力图固定按全天总量，不随柱状图的模型筛选变化（否则颜色和 tooltip 口径不一致）
+        const v = heatVal(rec);
+        heatHtml += `<div class="d" data-d="${ds}" data-v="${v}" style="background:${heatColor(v)}"></div>`;
+      });
+      heatHtml += '</div>';
+    });
+    heatEl.innerHTML = `<div class="month-labels">${labels}</div><div class="heat">${heatHtml}</div>`;
+  }
+  renderHeat();
+  document.getElementById('heatMetricTabs').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b || b.dataset.m === heatMetric) return;
+    heatMetric = b.dataset.m;
+    document.querySelectorAll('#heatMetricTabs button').forEach(x => x.classList.toggle('on', x === b));
+    document.getElementById('heatTitle').textContent = heatMetric === 'cost' ? '费用活跃度' : 'Token 活跃度';
+    renderHeat();
+  });
   document.getElementById('heatRange').textContent = iso(heatStart) + ' - ' + todayStr;
   document.getElementById('legendSw').innerHTML =
     HEAT.map(c => `<span class="d" style="background:${c}"></span>`).join('');
   heatEl.addEventListener('mousemove', e => {
     const el = e.target.closest('.d');
     if (!el || !el.dataset.d) { hideTip(); return; }
-    const t = +el.dataset.t;
-    showTip(`<div class="t">${el.dataset.d}</div>${t ? fmt(t) + ' tokens' : '无记录'}`, e.clientX, e.clientY);
+    const v = +el.dataset.v;
+    showTip(`<div class="t">${el.dataset.d}</div>${v ? (heatMetric === 'cost' ? fmtCost(v) : fmt(v) + ' tokens') : '无记录'}`, e.clientX, e.clientY);
   });
   heatEl.addEventListener('mouseleave', hideTip);
   heatEl.addEventListener('mousedown', hideTip);
