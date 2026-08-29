@@ -6,6 +6,8 @@ A local dashboard for Kimi Code token usage — reads your local session logs, a
 
 All data is processed locally. Nothing is uploaded anywhere.
 
+![Dashboard screenshot](docs/screenshot-full.png)
+
 ## Features
 
 - **Top stat strip**: tokens in range, peak day, daily average, active days, longest streak
