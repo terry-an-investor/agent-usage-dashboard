@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kimi Code 用量</title>
+<style>
+  :root {
+    --bg: #f4f4f6;
+    --card: #ffffff;
+    --border: #e8e8ec;
+    --divider: #efeff2;
+    --text: #17171c;
+    --dim: #8a8f99;
+    --blue: #3b82f6;
+    --green: #22c55e;
+    --gray-bar: #d6d6db;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+    padding: 44px 24px 64px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; }
+
+  header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+  h1 { font-size: 24px; font-weight: 700; }
+  header .sub { color: var(--dim); font-size: 13.5px; margin-top: 6px; }
+  .meta { color: var(--dim); font-size: 12.5px; text-align: right; line-height: 1.7; }
+  .meta code { background: #ececef; padding: 2px 8px; border-radius: 6px; font-size: 11.5px; color: #5b6270; }
+  #refreshBtn {
+    border: 1px solid var(--border); background: #fff; color: var(--text); border-radius: 8px;
+    padding: 4px 12px; font-size: 12px; cursor: pointer; font-family: inherit; margin-left: 8px;
+  }
+  #refreshBtn:hover { border-color: var(--blue); color: var(--blue); }
+  #refreshBtn:disabled { opacity: .5; cursor: wait; }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 22px 26px; margin-bottom: 16px;
+    box-shadow: 0 1px 2px rgba(20, 20, 40, 0.03);
+  }
+  .card h2 { font-size: 15.5px; font-weight: 650; margin-bottom: 3px; }
+  .card .hint { color: var(--dim); font-size: 12.5px; margin-bottom: 18px; }
+  .card-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 18px; }
+  .card-head h2 { margin: 0; }
+  .card-head .range { color: var(--dim); font-size: 12.5px; }
+  .card-head .head-right { display: flex; align-items: center; gap: 10px; }
+  .bar-model-sel {
+    font-size: 12.5px; color: var(--text); background: #fff;
+    border: 1px solid var(--divider); border-radius: 8px; padding: 4px 8px;
+    cursor: pointer; outline: none;
+  }
+  .bar-model-sel:hover { border-color: var(--blue); }
+
+  /* range bar */
+  .rangebar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 14px 26px; }
+  .rangebar .custom { display: flex; align-items: center; gap: 8px; color: var(--dim); font-size: 12.5px; }
+  .rangebar .dp-input {
+    border: 1px solid var(--border); border-radius: 10px; padding: 6px 10px; width: 108px;
+    font-size: 12.5px; color: var(--text); font-family: inherit; background: #fff;
+    cursor: pointer; text-align: center;
+  }
+  .rangebar .dp-input:hover { border-color: var(--blue); }
+  .rangebar .dp-input::placeholder { color: #b6bac2; }
+
+  /* custom date picker popup */
+  .dp-pop {
+    position: fixed; z-index: 20; width: 264px; padding: 14px 16px 12px;
+    background: #fff; border: 1px solid var(--border); border-radius: 16px;
+    box-shadow: 0 14px 40px rgba(20, 20, 40, .14); user-select: none;
+  }
+  .dp-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .dp-head .t { font-weight: 650; font-size: 14px; }
+  .dp-head button {
+    border: none; background: transparent; cursor: pointer; font-size: 15px; line-height: 1;
+    color: var(--dim); padding: 5px 9px; border-radius: 8px; font-family: inherit;
+  }
+  .dp-head button:hover { background: #f0f0f3; color: var(--text); }
+  .dp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; }
+  .dp-grid .wd { color: var(--dim); font-size: 11px; padding: 4px 0; }
+  .dp-grid .day { font-size: 12.5px; padding: 6px 0; border-radius: 9px; cursor: pointer; }
+  .dp-grid .day:hover { background: #f0f0f3; }
+  .dp-grid .day.tod { color: var(--blue); font-weight: 650; }
+  .dp-grid .day.sel { background: var(--blue); color: #fff; font-weight: 650; }
+  .dp-grid .day.sel:hover { background: var(--blue); }
+  .dp-grid .day.dis { color: #cfcfd6; cursor: default; }
+  .dp-grid .day.dis:hover { background: none; }
+  .dp-foot { display: flex; justify-content: space-between; margin-top: 10px; }
+  .dp-foot button {
+    border: none; background: transparent; cursor: pointer; font-size: 12.5px;
+    color: var(--blue); padding: 4px 6px; border-radius: 8px; font-family: inherit;
+  }
+  .dp-foot button:hover { background: #eef4fe; }
+  .rangebar #dApply {
+    border: none; background: var(--blue); color: #fff; border-radius: 8px;
+    padding: 6px 14px; font-size: 12.5px; cursor: pointer; font-family: inherit;
+  }
+  .rangebar #rangeLabel { margin-left: auto; color: var(--dim); font-size: 12.5px; }
+
+  /* top stat strip */
+  .strip { display: grid; grid-template-columns: repeat(5, 1fr); padding: 24px 0; }
+  .strip .cell { text-align: center; padding: 0 10px; border-left: 1px solid var(--divider); }
+  .strip .cell:first-child { border-left: none; }
+  .strip .v { font-size: 25px; font-weight: 720; letter-spacing: -.3px; }
+  .strip .v small { font-size: 14px; font-weight: 500; color: var(--dim); }
+  .strip .l { color: var(--dim); font-size: 12.5px; margin-top: 6px; }
+  @media (max-width: 820px) { .strip { grid-template-columns: repeat(2, 1fr); row-gap: 20px; } .strip .cell:nth-child(3) { border-left: none; } }
+
+  /* metric cards */
+  .row3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 860px) { .row3 { grid-template-columns: 1fr; } }
+  .kv { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 16px; margin-top: 14px; }
+  .kv .k { color: var(--dim); font-size: 12.5px; margin-bottom: 5px; }
+  .kv .v { font-size: 21px; font-weight: 700; }
+
+  /* heatmap */
+  .heat-scroll { padding-bottom: 4px; }
+  .heat { display: flex; gap: 3px; width: 100%; }
+  #heatmap, #bars { user-select: none; -webkit-user-select: none; }
+  .heat .wk { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .heat .d { width: 100%; aspect-ratio: 1 / 1; border-radius: 22%; background: #ebedf0; }
+  .heat-legend { display: flex; align-items: center; gap: 4px; color: var(--dim); font-size: 11.5px; margin-top: 12px; justify-content: flex-end; }
+  .heat-legend .d { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+  .month-labels { display: flex; color: var(--dim); font-size: 11px; margin-bottom: 6px; width: 100%; }
+  .month-labels span { flex: 1; white-space: nowrap; overflow: visible; min-width: 0; }
+
+  /* toggle tabs */
+  .tabs { display: inline-flex; background: #f0f0f3; border-radius: 9px; padding: 3px; }
+  .tabs button {
+    border: none; background: transparent; padding: 5px 14px; border-radius: 7px;
+    font-size: 12.5px; color: var(--dim); cursor: pointer; font-family: inherit;
+  }
+  .tabs button.on { background: #fff; color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+
+  /* charts */
+  svg text { font-family: inherit; }
+  .axis { fill: var(--dim); font-size: 10.5px; }
+  .grid-line { stroke: #eeeef1; stroke-width: 1; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; }
+  .legend .it { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--dim); }
+  .legend .sw { width: 10px; height: 10px; border-radius: 3px; }
+
+  /* model list */
+
+  /* tables */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: right; color: var(--dim); font-weight: 500; font-size: 12px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  th:first-child, td:first-child { text-align: left; }
+  #priceTable th:last-child, #priceTable td:last-child { text-align: left; }
+  #priceTable { table-layout: fixed; }
+  #priceTable th:nth-child(1) { width: 17%; }
+  #priceTable th:nth-child(2), #priceTable th:nth-child(3), #priceTable th:nth-child(4) { width: 14%; }
+  #priceTable td:last-child { font-size: 12px; color: var(--dim); }
+  td { padding: 10px; border-bottom: 1px solid var(--divider); text-align: right; font-variant-numeric: tabular-nums; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: #f8f8fa; }
+  .dim { color: var(--dim); }
+
+  footer { color: var(--dim); font-size: 12px; line-height: 1.9; margin-top: 10px; }
+  footer code { background: #ececef; padding: 1px 6px; border-radius: 5px; font-size: 11px; }
+
+  #tooltip {
+    position: fixed; pointer-events: none; z-index: 10;
+    background: #fff; border: 1px solid var(--border); border-radius: 9px;
+    padding: 9px 12px; font-size: 12px; line-height: 1.7; color: var(--text);
+    box-shadow: 0 8px 24px rgba(20,20,40,.12); display: none; white-space: nowrap;
+  }
+  #tooltip .t { font-weight: 700; margin-bottom: 2px; }
+  #tooltip .sw { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <h1>用量</h1>
+      <div class="sub">Kimi Code token 用量与活跃度统计 · 数据源为本机会话日志</div>
+    </div>
+    <div class="meta">
+      更新于 <span id="gen"></span> <button id="refreshBtn">刷新数据</button><br>
+      启动服务：<code>./start.sh</code>
+    </div>
+  </header>
+
+  <div class="card rangebar">
+    <div class="tabs" id="presetTabs">
+      <button data-p="today">今日</button>
+      <button data-p="7" class="on">近 7 日</button>
+      <button data-p="14">近 14 日</button>
+      <button data-p="30">近 30 日</button>
+      <button data-p="all">全部</button>
+    </div>
+    <div class="custom">
+      <input type="text" id="dStart" class="dp-input" readonly placeholder="开始日期"> 至 <input type="text" id="dEnd" class="dp-input" readonly placeholder="结束日期">
+      <button id="dApply">查询</button>
+    </div>
+    <span id="rangeLabel"></span>
+  </div>
+
+  <div class="card" style="padding:0 26px">
+    <div class="strip" id="strip"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <h2>Token 活跃度</h2>
+      <span class="range" id="heatRange"></span>
+    </div>
+    <div class="heat-scroll"><div id="heatmap"></div></div>
+    <div class="heat-legend">少 <span id="legendSw"></span> 多</div>
+  </div>
+
+  <div class="row3">
+    <div class="card"><h2>活跃度指标</h2><div class="kv" id="kvActivity"></div></div>
+    <div class="card"><h2>Token 指标</h2><div class="kv" id="kvToken"></div></div>
+    <div class="card"><h2>Cache 指标</h2><div class="kv" id="kvCache"></div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <h2>每日 Token 构成</h2>
+      <div class="head-right">
+        <select id="barModelSel" class="bar-model-sel"></select>
+        <span class="range" id="barRange"></span>
+      </div>
+    </div>
+    <div id="bars"></div>
+    <div class="legend" id="barLegend"></div>
+  </div>
+
+  <div class="card">
+    <h2>模型用量</h2>
+    <div class="hint">按总 token 排序（含缓存读取）· 跟随上方时间范围</div>
+    <table id="modelTable">
+      <thead><tr><th>模型</th><th>输入</th><th>输出</th><th>缓存读取</th><th>总计</th><th>估算成本</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>按月汇总</h2>
+    <div class="hint">估值成本按官方 API 定价计算（¥/1M tokens）· 固定为全时间段</div>
+    <table id="monthTable">
+      <thead><tr><th>月份</th><th>输入</th><th>输出</th><th>缓存读取</th><th>总计</th><th>估值成本</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>API 定价参考</h2>
+    <div class="hint">Kimi 开放平台官方价（¥ / 1M tokens）· 估算成本按此表计算</div>
+    <table id="priceTable">
+      <thead><tr><th>模型</th><th>输入</th><th>缓存命中</th><th>输出</th><th>备注</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <footer>
+    数据来源：本机 <code>~/.kimi-code/sessions/**/wire.jsonl</code> 中服务器返回的真实 token 计数，经 ccusage 聚合，未上传任何数据。<br>
+    若你是会员订阅用户，「估算成本」为「若按 API 按量计费」的等值参考，并非实际扣费。
+  </footer>
+</div>
+
+<div id="tooltip"></div>
+
+<script src="data.js"></script>
+<script>
+(function () {
+  const D = window.DASHBOARD_DATA;
+  const daily = D.daily.slice().sort((a, b) => a.date < b.date ? -1 : 1);
+  const byDate = Object.fromEntries(daily.map(d => [d.date, d]));
+
+  // ---------- 柱状图模型筛选 ----------
+  let selModel = 'all';
+  const allModels = [...new Set(daily.flatMap(d => (d.modelBreakdowns || []).map(b => b.modelName)))].sort();
+  document.getElementById('barModelSel').innerHTML =
+    `<option value="all">全部模型</option>` +
+    allModels.map(m => `<option value="${m}">${m}</option>`).join('');
+  document.getElementById('barModelSel').addEventListener('change', e => {
+    selModel = e.target.value;
+    renderBars();
+  });
+  // 按选中模型取当日记录；'all' 返回整天聚合，否则返回该模型的 breakdown
+  function dayRec(ds) {
+    const rec = byDate[ds];
+    if (!rec) return null;
+    if (selModel === 'all') return rec;
+    const b = (rec.modelBreakdowns || []).find(x => x.modelName === selModel);
+    if (!b) return null;
+    return {
+      inputTokens: b.inputTokens, outputTokens: b.outputTokens,
+      cacheReadTokens: b.cacheReadTokens, cacheCreationTokens: b.cacheCreationTokens,
+      totalTokens: b.inputTokens + b.outputTokens + b.cacheReadTokens + b.cacheCreationTokens,
+      cost: b.cost,
+    };
+  }
+
+  // ---------- helpers ----------
+  function fmt(n) { // 中文单位：万 / 亿
+    if (n >= 1e8) return (n / 1e8).toFixed(1) + ' 亿';
+    if (n >= 1e4) return (n / 1e4).toFixed(1) + ' 万';
+    return n.toLocaleString('en-US');
+  }
+  const fmtFull = n => n.toLocaleString('en-US');
+  // 官方 API 定价（¥ / 1M tokens）：https://platform.kimi.com/docs/pricing
+  // k3-256k 无公开 API 价，按 Kimi Code 文档「k3 (1M) 配额消耗约为 k3-256k 的 2 倍」折算半价
+  const PRICE = {
+    'k3':             { i: 20,  o: 100, cr: 2,   note: '官方公开价' },
+    'k3-256k':        { i: 10,  o: 50,  cr: 1,   note: '无公开价，按官方文档折算半价' },
+    'kimi-for-coding':{ i: 6.5, o: 27,  cr: 1.3, note: 'K2.7 Code' },
+  };
+  document.querySelector('#priceTable tbody').innerHTML = Object.entries(PRICE).map(([m, p]) =>
+    `<tr><td style="text-align:left">${m}</td><td>${p.i}</td><td>${p.cr}</td><td>${p.o}</td><td class="dim" style="text-align:left">${p.note}</td></tr>`
+  ).join('');
+  const costOf = mb => {
+    const p = PRICE[mb.modelName];
+    if (!p) return 0;
+    return (mb.inputTokens * p.i + mb.outputTokens * p.o + mb.cacheReadTokens * p.cr) / 1e6;
+  };
+  const fmtCost = c => '¥' + (c >= 100 ? c.toFixed(0) : c.toFixed(2));
+  const C = { input: '#6366f1', output: '#10b981', cacheRead: '#c7d2fe', cacheCreation: '#fbbf24' };
+  const NAMES = { input: '新输入', output: '输出', cacheRead: '缓存读取', cacheCreation: '缓存写入' };
+  const sum = (arr, f) => arr.reduce((s, x) => s + f(x), 0);
+
+  const tooltip = document.getElementById('tooltip');
+  function showTip(html, x, y) {
+    tooltip.innerHTML = html;
+    tooltip.style.display = 'block';
+    const r = tooltip.getBoundingClientRect();
+    tooltip.style.left = Math.min(x + 14, window.innerWidth - r.width - 10) + 'px';
+    tooltip.style.top = Math.max(y - r.height - 12, 8) + 'px';
+  }
+  function hideTip() { tooltip.style.display = 'none'; }
+
+  const today = new Date();
+  const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; // 本地日期，不能用 toISOString（UTC 会在早 8 点前差一天）
+  const todayStr = iso(today);
+  const firstDate = daily[0].date;
+
+  // ---------- header ----------
+  document.getElementById('gen').textContent =
+    new Date(D.generatedAt).toLocaleString('zh-CN', { hour12: false });
+
+  // ---------- global stats (不受时间范围影响) ----------
+  const dateSet = new Set(daily.map(d => d.date));
+  let curStreak = 0;
+  {
+    const d = new Date(today);
+    if (!dateSet.has(iso(d))) d.setDate(d.getDate() - 1);
+    while (dateSet.has(iso(d))) { curStreak++; d.setDate(d.getDate() - 1); }
+  }
+
+  function longestStreak(days) {
+    let best = 0, run = 0, prev = null;
+    for (const d of days) {
+      const cur = new Date(d.date);
+      run = (prev && (cur - prev) === 86400000) ? run + 1 : 1;
+      best = Math.max(best, run);
+      prev = cur;
+    }
+    return best;
+  }
+
+  // ---------- heatmap（固定最近一年，不随范围变化） ----------
+  const HEAT = ['#ebedf0', '#c6e48b', '#7bc96f', '#239a3b', '#196127'];
+  const yearAgo = new Date(today); yearAgo.setDate(today.getDate() - 364);
+  const heatStart = new Date(yearAgo); heatStart.setDate(yearAgo.getDate() - ((yearAgo.getDay() + 6) % 7));
+  const weeks = [];
+  {
+    const d = new Date(heatStart);
+    while (d <= today) {
+      const wk = [];
+      for (let i = 0; i < 7; i++) {
+        wk.push(d <= today ? iso(d) : null);
+        d.setDate(d.getDate() + 1);
+      }
+      weeks.push(wk);
+    }
+  }
+  const maxT = Math.max(...daily.map(d => d.totalTokens));
+  function heatColor(t) {
+    if (!t) return HEAT[0];
+    const r = t / maxT;
+    return HEAT[r < 0.15 ? 1 : r < 0.35 ? 2 : r < 0.65 ? 3 : 4];
+  }
+  let labels = '', lastM = '', lastLabelIdx = -99;
+  weeks.forEach((wk, wi) => {
+    const ds = wk.find(Boolean);
+    const m = ds ? ds.slice(0, 7) : '';
+    if (m && m !== lastM && wi - lastLabelIdx >= 3) {
+      labels += `<span>${+m.slice(5)}月</span>`; lastM = m; lastLabelIdx = wi;
+    }
+    else labels += '<span></span>';
+  });
+  let heatHtml = '';
+  weeks.forEach(wk => {
+    heatHtml += '<div class="wk">';
+    wk.forEach(ds => {
+      if (!ds) { heatHtml += '<div class="d" style="visibility:hidden"></div>'; return; }
+      const rec = dayRec(ds);
+      const t = rec ? rec.totalTokens : 0;
+      heatHtml += `<div class="d" data-d="${ds}" data-t="${t}" style="background:${heatColor(t)}"></div>`;
+    });
+    heatHtml += '</div>';
+  });
+  const heatEl = document.getElementById('heatmap');
+  heatEl.innerHTML = `<div class="month-labels">${labels}</div><div class="heat">${heatHtml}</div>`;
+  document.getElementById('heatRange').textContent = iso(heatStart) + ' - ' + todayStr;
+  document.getElementById('legendSw').innerHTML =
+    HEAT.map(c => `<span class="d" style="background:${c}"></span>`).join('');
+  heatEl.addEventListener('mousemove', e => {
+    const el = e.target.closest('.d');
+    if (!el || !el.dataset.d) { hideTip(); return; }
+    const t = +el.dataset.t;
+    showTip(`<div class="t">${el.dataset.d}</div>${t ? fmt(t) + ' tokens' : '无记录'}`, e.clientX, e.clientY);
+  });
+  heatEl.addEventListener('mouseleave', hideTip);
+  heatEl.addEventListener('mousedown', hideTip);
+
+  // ---------- 时间范围状态 ----------
+  let rangeEnd = todayStr; // 默认近 7 日
+  let rangeStart = (() => { const d0 = new Date(today); d0.setDate(d0.getDate() - 6); return iso(d0) < firstDate ? firstDate : iso(d0); })();
+  let activePreset = '7'; // 当前选中的预设；自定义范围时为 null，刷新时用它恢复视图
+  const isAll = () => rangeStart <= firstDate && rangeEnd >= todayStr;
+
+  // ---------- 范围内渲染 ----------
+  const kv = (id, rows) => {
+    document.getElementById(id).innerHTML = rows.map(r =>
+      `<div><div class="k">${r[0]}</div><div class="v">${r[1]}</div></div>`).join('');
+  };
+
+  function renderRange() {
+    const days = daily.filter(d => d.date >= rangeStart && d.date <= rangeEnd);
+    const spanDays = Math.round((new Date(rangeEnd) - new Date(rangeStart)) / 86400000) + 1;
+    const tot = sum(days, d => d.totalTokens);
+    const inp = sum(days, d => d.inputTokens);
+    const out = sum(days, d => d.outputTokens);
+    const cr = sum(days, d => d.cacheReadTokens);
+    const cw = sum(days, d => d.cacheCreationTokens);
+    const all = isAll();
+    const best = days.length
+      ? days.reduce((m, d) => d.totalTokens > m.totalTokens ? d : m, days[0])
+      : null;
+    const rangeBestStreak = longestStreak(days);
+    const hitRate = cr / Math.max(cr + inp, 1);
+    const cost = sum(days, d => sum(d.modelBreakdowns || [], costOf));
+
+    document.getElementById('rangeLabel').textContent = `统计范围：${rangeStart} ~ ${rangeEnd}`;
+    document.getElementById('barRange').textContent = `${rangeStart} ~ ${rangeEnd}`;
+
+    // strip
+    const cells = all ? [
+      { v: fmt(tot), l: '累计 tokens' },
+      { v: best ? fmt(best.totalTokens) : '—', l: best ? '单日峰值 · ' + best.date.slice(5) : '单日峰值' },
+      { v: fmt(Math.round(tot / Math.max(D.sessions.length, 1))), l: '平均每会话' },
+      { v: curStreak + ' <small>天</small>', l: '当前连续' },
+      { v: rangeBestStreak + ' <small>天</small>', l: '最长连续' },
+    ] : [
+      { v: fmt(tot), l: '范围内 tokens' },
+      { v: best ? fmt(best.totalTokens) : '—', l: best ? '单日峰值 · ' + best.date.slice(5) : '单日峰值' },
+      { v: fmt(Math.round(tot / Math.max(days.length, 1))), l: '平均每日（活跃日）' },
+      { v: `${days.length} <small>/ ${spanDays} 天</small>`, l: '活跃天数 / 范围' },
+      { v: rangeBestStreak + ' <small>天</small>', l: '范围内最长连续' },
+    ];
+    document.getElementById('strip').innerHTML =
+      cells.map(c => `<div class="cell"><div class="v">${c.v}</div><div class="l">${c.l}</div></div>`).join('');
+
+    // metric cards
+    kv('kvActivity', all ? [
+      ['总会话数', D.sessions.length],
+      ['活跃天数', days.length],
+      ['平均每会话', fmt(Math.round(tot / Math.max(D.sessions.length, 1)))],
+      ['最佳单日', best ? fmt(best.totalTokens) : '—'],
+    ] : [
+      ['活跃天数', days.length],
+      ['范围天数', spanDays],
+      ['平均每日（活跃日）', fmt(Math.round(tot / Math.max(days.length, 1)))],
+      ['最佳单日', best ? fmt(best.totalTokens) : '—'],
+    ]);
+    kv('kvToken', [
+      ['输入 tokens', fmt(inp)],
+      ['输出 tokens', fmt(out)],
+      ['缓存读取', fmt(cr)],
+      ['缓存写入', fmt(cw)],
+      ['估算成本（API 价）', fmtCost(cost)],
+      ['日均成本', fmtCost(cost / Math.max(days.length, 1))],
+    ]);
+    kv('kvCache', all ? [
+      ['缓存 tokens', fmt(cr)],
+      ['Cache 命中率', (hitRate * 100).toFixed(1) + '%'],
+      ['今日 tokens', fmt((byDate[todayStr] || {}).totalTokens || 0)],
+      ['本周 tokens', fmt(daily.filter(d => {
+        const ws = new Date(today); ws.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+        return d.date >= iso(ws);
+      }).reduce((s, d) => s + d.totalTokens, 0))],
+    ] : [
+      ['缓存 tokens', fmt(cr)],
+      ['Cache 命中率', (hitRate * 100).toFixed(1) + '%'],
+      ['平均每日缓存', fmt(Math.round(cr / Math.max(days.length, 1)))],
+      ['缓存占比', (cr / Math.max(tot, 1) * 100).toFixed(1) + '%'],
+    ]);
+
+    renderBars();
+    renderModels(days);
+  }
+
+  // ---------- bars ----------
+  function renderBars() {
+    const days = [];
+    for (let d = new Date(rangeStart); d <= new Date(rangeEnd); d.setDate(d.getDate() + 1)) days.push(iso(d));
+
+    const W = 640, H = 220, padL = 62, padB = 26, padT = 8;
+    const plotW = W - padL - 8, plotH = H - padB - padT;
+    const maxV = Math.max(...days.map(ds => (dayRec(ds) || {}).totalTokens || 0), 1);
+    const bw = plotW / days.length;
+    const labelStep = Math.max(1, Math.ceil(days.length / 12));
+    let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet">`;
+    [0.25, 0.5, 0.75, 1].forEach(f => {
+      const y = padT + plotH * (1 - f);
+      svg += `<line class="grid-line" x1="${padL}" y1="${y}" x2="${W - 8}" y2="${y}"/>`;
+      svg += `<text class="axis" x="${padL - 6}" y="${y + 3}" text-anchor="end">${fmt(Math.round(maxV * f))}</text>`;
+    });
+    days.forEach((ds, i) => {
+      const rec = dayRec(ds);
+      const x = padL + i * bw + bw * 0.2, w = Math.max(bw * 0.6, 1);
+      let y = padT + plotH, drew = false;
+      if (rec) {
+        [['cacheRead', rec.cacheReadTokens], ['output', rec.outputTokens],
+         ['input', rec.inputTokens], ['cacheCreation', rec.cacheCreationTokens]].forEach(([k, v]) => {
+          const h = (v / maxV) * plotH;
+          if (h > 0) { y -= h; drew = true; svg += `<rect x="${x}" y="${y}" width="${w}" height="${Math.max(h, 0.5)}" fill="${C[k]}" rx="1.5" class="bar" data-d="${ds}"/>`; }
+        });
+      }
+      if (!drew) svg += `<rect x="${x}" y="${padT + plotH - 2}" width="${w}" height="2" fill="#ececf0" rx="1" class="bar" data-d="${ds}"/>`;
+      if (days.length <= 10 || i % labelStep === 0 || i === days.length - 1) {
+        svg += `<text class="axis" x="${x + w / 2}" y="${H - 8}" text-anchor="middle">${ds.slice(5)}</text>`;
+      }
+    });
+    svg += `<line x1="${padL}" y1="${padT + plotH}" x2="${W - 8}" y2="${padT + plotH}" style="stroke:#dcdce0"/>`;
+    svg += '</svg>';
+    document.getElementById('bars').innerHTML = svg;
+  }
+  document.getElementById('barLegend').innerHTML =
+    ['input', 'output', 'cacheRead'].map(k =>
+      `<span class="it"><span class="sw" style="background:${C[k]}"></span>${NAMES[k]}</span>`).join('');
+  document.getElementById('bars').addEventListener('mousemove', e => {
+    const el = e.target.closest('.bar');
+    if (!el) { hideTip(); return; }
+    const ds = el.dataset.d, rec = byDate[ds];
+    if (!rec) { showTip(`<div class="t">${ds}</div>无记录`, e.clientX, e.clientY); return; }
+    showTip(`<div class="t">${ds} · ${fmt(rec.totalTokens)}</div>` +
+      `<div><span class="sw" style="background:${C.input}"></span>新输入 ${fmtFull(rec.inputTokens)}</div>` +
+      `<div><span class="sw" style="background:${C.output}"></span>输出 ${fmtFull(rec.outputTokens)}</div>` +
+      `<div><span class="sw" style="background:${C.cacheRead}"></span>缓存读取 ${fmtFull(rec.cacheReadTokens)}</div>` +
+      `<div style="margin-top:3px;border-top:1px solid var(--divider);padding-top:3px">估算成本 ${fmtCost(rec.cost != null ? rec.cost : sum(rec.modelBreakdowns || [], costOf))}</div>`,
+      e.clientX, e.clientY);
+  });
+  document.getElementById('bars').addEventListener('mouseleave', hideTip);
+  document.getElementById('bars').addEventListener('mousedown', hideTip);
+
+  // ---------- model list（跟随范围） ----------
+  function renderModels(days) {
+    const models = {};
+    days.forEach(d => (d.modelBreakdowns || []).forEach(mb => {
+      const m = models[mb.modelName] = models[mb.modelName] || { input: 0, output: 0, cacheRead: 0, total: 0, cost: 0 };
+      m.input += mb.inputTokens; m.output += mb.outputTokens; m.cacheRead += mb.cacheReadTokens;
+      m.total += mb.inputTokens + mb.outputTokens + mb.cacheReadTokens + (mb.cacheCreationTokens || 0);
+      m.cost += costOf(mb);
+    }));
+    const rows = Object.entries(models).sort((a, b) => b[1].total - a[1].total);
+    document.querySelector('#modelTable tbody').innerHTML = rows.length
+      ? rows.map(([name, m]) =>
+        `<tr><td style="text-align:left;font-weight:620">${name}</td><td>${fmt(m.input)}</td><td>${fmt(m.output)}</td>` +
+        `<td>${fmt(m.cacheRead)}</td><td><b>${fmt(m.total)}</b></td><td class="dim">≈ ${fmtCost(m.cost)}</td></tr>`).join('')
+      : '<tr><td colspan="6" style="text-align:left" class="dim">该范围内无记录</td></tr>';
+  }
+
+  // ---------- 范围选择交互 ----------
+  const presetTabs = document.getElementById('presetTabs');
+  const dStart = document.getElementById('dStart');
+  const dEnd = document.getElementById('dEnd');
+
+  // 自绘圆角日历弹层（原生 date 控件的弹层无法改样式）
+  function attachDatePicker(input) {
+    let pop = null, viewY, viewM;
+    const pad = n => String(n).padStart(2, '0');
+    function close() {
+      if (pop) { pop.remove(); pop = null; document.removeEventListener('mousedown', onDoc); }
+    }
+    function onDoc(e) { if (pop && !pop.contains(e.target) && e.target !== input) close(); }
+    function open() {
+      close();
+      const base = input.value || todayStr;
+      viewY = +base.slice(0, 4); viewM = +base.slice(5, 7) - 1;
+      pop = document.createElement('div');
+      pop.className = 'dp-pop';
+      const r = input.getBoundingClientRect();
+      pop.style.left = Math.min(r.left, window.innerWidth - 290) + 'px';
+      pop.style.top = (r.bottom + 6) + 'px';
+      document.body.appendChild(pop);
+      render();
+      pop.addEventListener('mousedown', e => e.stopPropagation());
+      pop.addEventListener('click', onPick);
+      document.addEventListener('mousedown', onDoc);
+    }
+    function onPick(e) {
+      const b = e.target.closest('[data-a], .day');
+      if (!b) return;
+      if (b.dataset.a) {
+        if (b.dataset.a === 'clear') { input.value = ''; close(); }
+        else if (b.dataset.a === 'today') { input.value = todayStr; close(); }
+        else {
+          viewM += +b.dataset.a;
+          if (viewM < 0) { viewM = 11; viewY--; }
+          if (viewM > 11) { viewM = 0; viewY++; }
+          render();
+        }
+        return;
+      }
+      if (b.classList.contains('dis')) return;
+      input.value = b.dataset.d;
+      close();
+    }
+    function render() {
+      const firstWd = (new Date(viewY, viewM, 1).getDay() + 6) % 7; // 周一开头
+      const daysIn = new Date(viewY, viewM + 1, 0).getDate();
+      let h = `<div class="dp-head"><button data-a="-1">‹</button>` +
+        `<span class="t">${viewY}年${pad(viewM + 1)}月</span><button data-a="1">›</button></div>`;
+      h += '<div class="dp-grid">' + ['一', '二', '三', '四', '五', '六', '日']
+        .map(w => `<span class="wd">${w}</span>`).join('');
+      for (let i = 0; i < firstWd; i++) h += '<span></span>';
+      for (let d = 1; d <= daysIn; d++) {
+        const ds = `${viewY}-${pad(viewM + 1)}-${pad(d)}`;
+        let cls = 'day';
+        if (ds < firstDate || ds > todayStr) cls += ' dis';
+        if (ds === todayStr) cls += ' tod';
+        if (ds === input.value) cls += ' sel';
+        h += `<span class="${cls}" data-d="${ds}">${d}</span>`;
+      }
+      h += '</div><div class="dp-foot"><button data-a="clear">清除</button><button data-a="today">今天</button></div>';
+      pop.innerHTML = h;
+    }
+    input.addEventListener('click', open);
+  }
+  attachDatePicker(dStart);
+  attachDatePicker(dEnd);
+
+  function setPreset(btn) {
+    document.querySelectorAll('#presetTabs button').forEach(x => x.classList.toggle('on', x === btn));
+  }
+  function applyPreset(p) {
+    if (p === 'all') { rangeStart = firstDate; rangeEnd = todayStr; }
+    else if (p === 'today') { rangeStart = rangeEnd = todayStr; }
+    else {
+      const d0 = new Date(today); d0.setDate(d0.getDate() - (+p - 1));
+      rangeStart = iso(d0) < firstDate ? firstDate : iso(d0);
+      rangeEnd = todayStr;
+    }
+    dStart.value = ''; dEnd.value = '';
+    activePreset = p;
+    const btn = document.querySelector(`#presetTabs button[data-p="${p}"]`);
+    if (btn) setPreset(btn);
+  }
+  presetTabs.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    applyPreset(b.dataset.p);
+    renderRange();
+  });
+  document.getElementById('dApply').addEventListener('click', () => {
+    if (!dStart.value || !dEnd.value) return;
+    let a = dStart.value, b = dEnd.value;
+    if (a > b) [a, b] = [b, a];
+    if (a < firstDate) a = firstDate;
+    if (b > todayStr) b = todayStr;
+    rangeStart = a; rangeEnd = b;
+    activePreset = null;
+    document.querySelectorAll('#presetTabs button').forEach(x => x.classList.remove('on'));
+    renderRange();
+  });
+
+  // ---------- monthly（全时间段，从 daily 重算，成本用官方 API 价） ----------
+  const byMonth = {};
+  daily.forEach(d => {
+    const k = d.date.slice(0, 7);
+    const m = byMonth[k] = byMonth[k] || { input: 0, output: 0, cacheRead: 0, total: 0, cost: 0 };
+    m.input += d.inputTokens; m.output += d.outputTokens; m.cacheRead += d.cacheReadTokens;
+    m.total += d.totalTokens;
+    m.cost += sum(d.modelBreakdowns || [], costOf);
+  });
+  document.querySelector('#monthTable tbody').innerHTML = Object.entries(byMonth).map(([k, m]) =>
+    `<tr><td>${k}</td><td>${fmtFull(m.input)}</td><td>${fmtFull(m.output)}</td>` +
+    `<td>${fmtFull(m.cacheRead)}</td><td><b>${fmtFull(m.total)}</b></td><td class="dim">${fmtCost(m.cost)}</td></tr>`
+  ).join('');
+
+  // 初始渲染：URL 带范围参数（刷新时写入的）则恢复用户选择，否则默认近 7 日
+  {
+    const q = new URLSearchParams(location.search);
+    const p = q.get('p'), s = q.get('s'), e = q.get('e');
+    const isoRe = /^\d{4}-\d{2}-\d{2}$/;
+    if (p && ['today', '7', '14', '30', 'all'].includes(p)) {
+      applyPreset(p);
+    } else if (s && e && isoRe.test(s) && isoRe.test(e)) {
+      let a = s < e ? s : e, b = s < e ? e : s;
+      if (a < firstDate) a = firstDate;
+      if (b > todayStr) b = todayStr;
+      rangeStart = a; rangeEnd = b;
+      activePreset = null;
+      dStart.value = a; dEnd.value = b;
+      document.querySelectorAll('#presetTabs button').forEach(x => x.classList.remove('on'));
+    }
+  }
+  renderRange();
+
+  // ---------- 刷新按钮 ----------
+  const refreshBtn = document.getElementById('refreshBtn');
+  refreshBtn.addEventListener('click', async () => {
+    refreshBtn.disabled = true;
+    refreshBtn.textContent = '刷新中…';
+    try {
+      const r = await fetch('/refresh', { method: 'POST' });
+      const body = await r.json();
+      if (body.ok) {
+        // 把当前选中的时间范围写进 URL，刷新后恢复同一视图（直接进页面无参数则回到默认近 7 日）
+        const qs = activePreset ? `?p=${activePreset}` : `?s=${rangeStart}&e=${rangeEnd}`;
+        location.href = location.pathname + qs;
+        return;
+      }
+      alert('刷新失败：\n' + (body.log || '未知错误'));
+    } catch (e) {
+      alert('无法连接本地服务。请先在项目目录运行：\n./start.sh');
+    }
+    refreshBtn.disabled = false;
+    refreshBtn.textContent = '刷新数据';
+  });
+})();
+</script>
+</body>
+</html>
