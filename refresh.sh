@@ -4,12 +4,19 @@ set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
 TMP="$(mktemp -d)"
 
-# 直接执行脚本时也防并发（serve.py 的锁只护住网页入口）；锁目录已存在说明有刷新在跑
+# 直接执行脚本时也防并发（serve.py 的锁只护住网页入口）
 LOCK="$DIR/.refresh.lock"
 if ! mkdir "$LOCK" 2>/dev/null; then
-  echo "另一个刷新正在进行中，跳过" >&2
-  exit 1
+  # 锁已存在：若里面的 PID 已死，说明是上次异常退出（如 SIGKILL）留下的死锁，清掉重来
+  old="$(cat "$LOCK/pid" 2>/dev/null || true)"
+  if [ -n "$old" ] && kill -0 "$old" 2>/dev/null; then
+    echo "另一个刷新正在进行中（PID $old），跳过" >&2
+    exit 1
+  fi
+  rm -rf "$LOCK"
+  mkdir "$LOCK"
 fi
+echo $$ > "$LOCK/pid"
 trap 'rm -rf "$TMP" "$LOCK"' EXIT
 
 CCUSAGE="$DIR/node_modules/.bin/ccusage"  # 本地固定版本，避免每次 npx 联网查 registry
@@ -39,9 +46,13 @@ const payload = {
   sessions: read('session').sessions,
   totals: read('daily').totals,
 };
-// 先写临时文件再原子替换，避免写入中断留下残缺的 data.js
-const tmpOut = out + '.tmp';
-fs.writeFileSync(tmpOut, 'window.DASHBOARD_DATA = ' + JSON.stringify(payload) + ';\n');
+// JSON 中的 < 转义为 <（JSON 等价写法），防止日志数据里的 </script>
+// 截断页面的 <script src="data.js"> 标签造成脚本注入
+const json = JSON.stringify(payload).replace(/</g, '\\u003c');
+// 先在临时目录写好再原子替换，避免写入中断留下残缺的 data.js
+const tmpOut = `${tmp}/data.js`;
+fs.writeFileSync(tmpOut, 'window.DASHBOARD_DATA = ' + json + ';\n');
 fs.renameSync(tmpOut, out);
+fs.chmodSync(out, 0o600);  // 个人用量数据仅本用户可读
 console.log('data.js updated:', payload.daily.length, 'days,', payload.sessions.length, 'sessions');
 EOF

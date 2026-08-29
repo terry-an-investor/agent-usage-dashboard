@@ -271,7 +271,17 @@
 <script src="data.js"></script>
 <script>
 (function () {
+  'use strict';
   const D = window.DASHBOARD_DATA;
+  // data.js 缺失（还没跑过 ./refresh.sh）或结构不对时给出提示，而不是白屏报错
+  if (!D || !Array.isArray(D.daily)) {
+    document.querySelectorAll('.wrap > *:not(header)').forEach(el => el.remove());
+    document.querySelector('.wrap').insertAdjacentHTML('beforeend',
+      '<div class="card"><h2>还没有数据文件</h2><div class="hint">请先在项目目录运行 ' +
+      '<code>npm install</code> 和 <code>./refresh.sh</code> 生成数据，然后刷新本页；或直接运行 <code>./start.sh</code>。</div></div>');
+    document.getElementById('gen').textContent = '—';
+    return;
+  }
   const daily = D.daily.slice().sort((a, b) => a.date < b.date ? -1 : 1);
   const byDate = Object.fromEntries(daily.map(d => [d.date, d]));
 
@@ -302,10 +312,11 @@
   // ---------- 柱状图模型筛选 ----------
   let selModel = 'all';
   const allModels = [...new Set(daily.flatMap(d => (d.modelBreakdowns || []).map(b => b.modelName)))].sort();
-  document.getElementById('barModelSel').innerHTML =
-    `<option value="all">全部模型</option>` +
-    allModels.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
-  document.getElementById('barModelSel').addEventListener('change', e => {
+  const barSel = document.getElementById('barModelSel');
+  // 用 DOM API 赋值而不是拼 innerHTML：既防 XSS，也不会把转义后的字符串当成 option 的值
+  barSel.add(new Option('全部模型', 'all'));
+  allModels.forEach(m => barSel.add(new Option(m, m)));
+  barSel.addEventListener('change', e => {
     selModel = e.target.value;
     renderBars();
   });
@@ -326,6 +337,7 @@
 
   // ---------- helpers ----------
   function fmt(n) { // 中文单位：万 / 亿
+    if (!Number.isFinite(n)) return '—'; // 数据异常兜底，别显示 NaN
     if (n >= 1e8) return (n / 1e8).toFixed(1) + ' 亿';
     if (n >= 1e4) return (n / 1e4).toFixed(1) + ' 万';
     return n.toLocaleString('en-US');
@@ -350,7 +362,7 @@
     if (!p) return 0;
     return (mb.inputTokens * p.i + mb.outputTokens * p.o + mb.cacheReadTokens * p.cr) / 1e6;
   };
-  const fmtCost = c => '¥' + (c >= 100 ? c.toFixed(0) : c.toFixed(2));
+  const fmtCost = c => !Number.isFinite(c) ? '—' : '¥' + (c >= 100 ? c.toFixed(0) : c.toFixed(2));
   const C = { input: '#6366f1', output: '#10b981', cacheRead: '#c7d2fe', cacheCreation: '#fbbf24' };
   const NAMES = { input: '新输入', output: '输出', cacheRead: '缓存读取', cacheCreation: '缓存写入' };
   const sum = (arr, f) => arr.reduce((s, x) => s + f(x), 0);
@@ -430,7 +442,7 @@
     heatHtml += '<div class="wk">';
     wk.forEach(ds => {
       if (!ds) { heatHtml += '<div class="d" style="visibility:hidden"></div>'; return; }
-      const rec = dayRec(ds);
+      const rec = byDate[ds]; // 热力图固定按全天总量，不随柱状图的模型筛选变化（否则颜色和 tooltip 口径不一致）
       const t = rec ? rec.totalTokens : 0;
       heatHtml += `<div class="d" data-d="${ds}" data-t="${t}" style="background:${heatColor(t)}"></div>`;
     });
@@ -579,7 +591,7 @@
   document.getElementById('bars').addEventListener('mousemove', e => {
     const el = e.target.closest('.bar');
     if (!el) { hideTip(); return; }
-    const ds = el.dataset.d, rec = byDate[ds];
+    const ds = el.dataset.d, rec = dayRec(ds); // 跟随模型筛选，与柱子高度的口径一致
     if (!rec) { showTip(`<div class="t">${ds}</div>无记录`, e.clientX, e.clientY); return; }
     showTip(`<div class="t">${ds} · ${fmt(rec.totalTokens)}</div>` +
       `<div><span class="sw" style="background:${C.input}"></span>新输入 ${fmtFull(rec.inputTokens)}</div>` +
@@ -730,10 +742,16 @@
   {
     const q = new URLSearchParams(location.search);
     const p = q.get('p'), s = q.get('s'), e = q.get('e');
-    const isoRe = /^\d{4}-\d{2}-\d{2}$/;
+    // 校验格式 + 真实日期（拒绝 2026-02-30 这类会被 Date 回退的非法值）
+    const validISO = ds => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(ds)) return false;
+      const [y, m, d] = ds.split('-').map(Number);
+      const dt = new Date(y, m - 1, d);
+      return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
+    };
     if (p && ['today', '7', '14', '30', 'all'].includes(p)) {
       applyPreset(p);
-    } else if (s && e && isoRe.test(s) && isoRe.test(e)) {
+    } else if (s && e && validISO(s) && validISO(e)) {
       let a = s < e ? s : e, b = s < e ? e : s;
       if (a < firstDate) a = firstDate;
       if (b > todayStr) b = todayStr;

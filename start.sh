@@ -5,9 +5,14 @@ URL="http://127.0.0.1:8931"
 if ! curl -s -o /dev/null "$URL/" 2>/dev/null; then
   nohup python3 "$DIR/serve.py" >/dev/null 2>&1 &
   # 轮询等服务真正监听再打开页面，避免服务启动失败时打开空白/错误页
+  up=0
   for i in $(seq 1 20); do
-    curl -s -o /dev/null "$URL/" && break
+    if curl -s -o /dev/null "$URL/" 2>/dev/null; then up=1; break; fi
     sleep 0.5
   done
+  if [ "$up" -ne 1 ]; then
+    echo "服务启动失败：请检查 python3 是否可用、端口 8931 是否被其它进程占用" >&2
+    exit 1
+  fi
 fi
 open "$URL/index.html"

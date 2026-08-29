@@ -20,6 +20,12 @@ class Handler(SimpleHTTPRequestHandler):
         p = self.path.split("?", 1)[0]
         if p == "/data.js" or p.endswith(".html") or p == "/":
             self.send_header("Cache-Control", "no-store")
+        # 防止被其它网站 iframe 嵌入（点击劫持）；资源只允许同源 + 内联（本页面全是内联 CSS/JS）
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header(
+            "Content-Security-Policy",
+            "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'",
+        )
         super().end_headers()
 
     def do_POST(self):
