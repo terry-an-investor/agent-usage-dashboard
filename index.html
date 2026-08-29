@@ -30,6 +30,12 @@
   h1 { font-size: 24px; font-weight: 700; }
   header .sub { color: var(--dim); font-size: 13.5px; margin-top: 6px; }
   .meta { color: var(--dim); font-size: 12.5px; text-align: right; line-height: 1.7; }
+  .head-side { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+  #langBtn {
+    border: 1px solid var(--border); background: #fff; color: var(--text); border-radius: 8px;
+    padding: 4px 12px; font-size: 12px; cursor: pointer; font-family: inherit;
+  }
+  #langBtn:hover { border-color: var(--blue); color: var(--blue); }
   .meta code { background: #ececef; padding: 2px 8px; border-radius: 6px; font-size: 11.5px; color: #5b6270; }
   #refreshBtn {
     border: 1px solid var(--border); background: #fff; color: var(--text); border-radius: 8px;
@@ -178,26 +184,29 @@
 
   <header>
     <div>
-      <h1>用量</h1>
-      <div class="sub">Kimi Code token 用量与活跃度统计 · 数据源为本机会话日志</div>
+      <h1 data-i18n="usage">用量</h1>
+      <div class="sub" data-i18n="sub">Kimi Code token 用量与活跃度统计 · 数据源为本机会话日志</div>
     </div>
-    <div class="meta">
-      更新于 <span id="gen"></span> <button id="refreshBtn">刷新数据</button><br>
-      启动服务：<code>./start.sh</code>
+    <div class="head-side">
+      <button id="langBtn">EN</button>
+      <div class="meta">
+        <span data-i18n="updatedAt">更新于</span> <span id="gen"></span> <button id="refreshBtn" data-i18n="refresh">刷新数据</button><br>
+        <span data-i18n="startCmd">启动服务：</span><code>./start.sh</code>
+      </div>
     </div>
   </header>
 
   <div class="card rangebar">
     <div class="tabs" id="presetTabs">
-      <button data-p="today">今日</button>
-      <button data-p="7" class="on">近 7 日</button>
-      <button data-p="14">近 14 日</button>
-      <button data-p="30">近 30 日</button>
-      <button data-p="all">全部</button>
+      <button data-p="today" data-i18n="pToday">今日</button>
+      <button data-p="7" data-i18n="p7" class="on">近 7 日</button>
+      <button data-p="14" data-i18n="p14">近 14 日</button>
+      <button data-p="30" data-i18n="p30">近 30 日</button>
+      <button data-p="all" data-i18n="pAll">全部</button>
     </div>
     <div class="custom">
-      <input type="text" id="dStart" class="dp-input" readonly placeholder="开始日期"> 至 <input type="text" id="dEnd" class="dp-input" readonly placeholder="结束日期">
-      <button id="dApply">查询</button>
+      <input type="text" id="dStart" class="dp-input" readonly data-i18n-ph="phStart" placeholder="开始日期"> <span data-i18n="toSep">至</span> <input type="text" id="dEnd" class="dp-input" readonly data-i18n-ph="phEnd" placeholder="结束日期">
+      <button id="dApply" data-i18n="apply">查询</button>
     </div>
     <span id="rangeLabel"></span>
   </div>
@@ -211,25 +220,25 @@
       <h2 id="heatTitle">Token 活跃度</h2>
       <div class="head-right">
         <div class="tabs" id="heatMetricTabs">
-          <button data-m="tokens" class="on">Token</button>
-          <button data-m="cost">费用</button>
+          <button data-m="tokens" data-i18n="metricToken" class="on">Token</button>
+          <button data-m="cost" data-i18n="metricCost">费用</button>
         </div>
         <span class="range" id="heatRange"></span>
       </div>
     </div>
     <div class="heat-scroll"><div id="heatmap"></div></div>
-    <div class="heat-legend">少 <span id="legendSw"></span> 多</div>
+    <div class="heat-legend"><span data-i18n="less">少</span> <span id="legendSw"></span> <span data-i18n="more">多</span></div>
   </div>
 
   <div class="row3">
-    <div class="card"><h2>活跃度指标</h2><div class="kv" id="kvActivity"></div></div>
-    <div class="card"><h2>Token 指标</h2><div class="kv" id="kvToken"></div></div>
-    <div class="card"><h2>Cache 指标</h2><div class="kv" id="kvCache"></div></div>
+    <div class="card"><h2 data-i18n="cardActivity">活跃度指标</h2><div class="kv" id="kvActivity"></div></div>
+    <div class="card"><h2 data-i18n="cardToken">Token 指标</h2><div class="kv" id="kvToken"></div></div>
+    <div class="card"><h2 data-i18n="cardCache">Cache 指标</h2><div class="kv" id="kvCache"></div></div>
   </div>
 
   <div class="card">
     <div class="card-head">
-      <h2>每日 Token 构成</h2>
+      <h2 data-i18n="dailyTitle">每日 Token 构成</h2>
       <div class="head-right">
         <select id="barModelSel" class="bar-model-sel"></select>
         <span class="range" id="barRange"></span>
@@ -240,35 +249,35 @@
   </div>
 
   <div class="card">
-    <h2>模型用量</h2>
-    <div class="hint">按总 token 排序（含缓存读取）· 跟随上方时间范围</div>
+    <h2 data-i18n="modelUsage">模型用量</h2>
+    <div class="hint" data-i18n="modelHint">按总 token 排序（含缓存读取）· 跟随上方时间范围</div>
     <table id="modelTable">
-      <thead><tr><th>模型</th><th>输入</th><th>输出</th><th>缓存读取</th><th>总计</th><th>估算成本</th></tr></thead>
+      <thead><tr><th data-i18n="thModel">模型</th><th data-i18n="thInput">输入</th><th data-i18n="thOutput">输出</th><th data-i18n="thCacheRead">缓存读取</th><th data-i18n="thTotal">总计</th><th data-i18n="thCost">估算成本</th></tr></thead>
       <tbody></tbody>
     </table>
   </div>
 
   <div class="card">
-    <h2>按月汇总</h2>
-    <div class="hint">估值成本按官方 API 定价计算（¥/1M tokens）· 固定为全时间段</div>
+    <h2 data-i18n="monthlyTitle">按月汇总</h2>
+    <div class="hint" data-i18n="monthlyHint">估值成本按官方 API 定价计算（¥/1M tokens）· 固定为全时间段</div>
     <table id="monthTable">
-      <thead><tr><th>月份</th><th>输入</th><th>输出</th><th>缓存读取</th><th>总计</th><th>估值成本</th></tr></thead>
+      <thead><tr><th data-i18n="thMonth">月份</th><th data-i18n="thInput">输入</th><th data-i18n="thOutput">输出</th><th data-i18n="thCacheRead">缓存读取</th><th data-i18n="thTotal">总计</th><th data-i18n="thCost2">估值成本</th></tr></thead>
       <tbody></tbody>
     </table>
   </div>
 
   <div class="card">
-    <h2>API 定价参考</h2>
-    <div class="hint">Kimi 开放平台官方价（¥ / 1M tokens）· 估算成本按此表计算</div>
+    <h2 data-i18n="priceTitle">API 定价参考</h2>
+    <div class="hint" data-i18n="priceHint">Kimi 开放平台官方价（¥ / 1M tokens）· 估算成本按此表计算</div>
     <table id="priceTable">
-      <thead><tr><th>模型</th><th>输入</th><th>缓存命中</th><th>输出</th><th>备注</th></tr></thead>
+      <thead><tr><th data-i18n="thModel">模型</th><th data-i18n="thInput">输入</th><th data-i18n="thCacheHit">缓存命中</th><th data-i18n="thOutput">输出</th><th data-i18n="thNote">备注</th></tr></thead>
       <tbody></tbody>
     </table>
   </div>
 
   <footer>
-    数据来源：本机 <code>~/.kimi-code/sessions/**/wire.jsonl</code> 中服务器返回的真实 token 计数，经 ccusage 聚合，未上传任何数据。<br>
-    若你是会员订阅用户，「估算成本」为「若按 API 按量计费」的等值参考，并非实际扣费。
+    <span data-i18n="footer1">数据来源：本机 <code>~/.kimi-code/sessions/**/wire.jsonl</code> 中服务器返回的真实 token 计数，经 ccusage 聚合，未上传任何数据。</span><br>
+    <span data-i18n="footer2">若你是会员订阅用户，「估算成本」为「若按 API 按量计费」的等值参考，并非实际扣费。</span>
   </footer>
 </div>
 
@@ -278,13 +287,106 @@
 <script>
 (function () {
   'use strict';
+
+  // ---------- 中英文切换（默认中文，选择记入 localStorage） ----------
+  const I18N = {
+    zh: {
+      usage: '用量', pageTitle: 'Kimi Code 用量',
+      sub: 'Kimi Code token 用量与活跃度统计 · 数据源为本机会话日志',
+      updatedAt: '更新于', refresh: '刷新数据', refreshing: '刷新中…', startCmd: '启动服务：',
+      pToday: '今日', p7: '近 7 日', p14: '近 14 日', p30: '近 30 日', pAll: '全部',
+      toSep: '至', apply: '查询', phStart: '开始日期', phEnd: '结束日期',
+      heatTitleT: 'Token 活跃度', heatTitleC: '费用活跃度', metricToken: 'Token', metricCost: '费用',
+      less: '少', more: '多',
+      cardActivity: '活跃度指标', cardToken: 'Token 指标', cardCache: 'Cache 指标',
+      dailyTitle: '每日 Token 构成', allModels: '全部模型',
+      modelUsage: '模型用量', modelHint: '按总 token 排序（含缓存读取）· 跟随上方时间范围',
+      monthlyTitle: '按月汇总', monthlyHint: '估值成本按官方 API 定价计算（¥/1M tokens）· 固定为全时间段',
+      priceTitle: 'API 定价参考', priceHint: 'Kimi 开放平台官方价（¥ / 1M tokens）· 估算成本按此表计算',
+      thModel: '模型', thInput: '输入', thOutput: '输出', thCacheRead: '缓存读取', thTotal: '总计',
+      thCost: '估算成本', thMonth: '月份', thCost2: '估值成本', thCacheHit: '缓存命中', thNote: '备注',
+      footer1: '数据来源：本机 <code>~/.kimi-code/sessions/**/wire.jsonl</code> 中服务器返回的真实 token 计数，经 ccusage 聚合，未上传任何数据。',
+      footer2: '若你是会员订阅用户，「估算成本」为「若按 API 按量计费」的等值参考，并非实际扣费。',
+      rangeLabel: '统计范围：',
+      totalTokens: '累计 tokens', peakDay: '单日峰值', avgSession: '平均每会话',
+      curStreak: '当前连续', bestStreak: '最长连续', rangeTokens: '范围内 tokens',
+      avgDaily: '平均每日（活跃日）', activeDaysRange: '活跃天数 / 范围', bestStreakRange: '范围内最长连续',
+      daysUnit: '天',
+      totalSessions: '总会话数', activeDays: '活跃天数', bestDay: '最佳单日', spanDays: '范围天数',
+      inputTokens: '输入 tokens', outputTokens: '输出 tokens', cacheRead: '缓存读取', cacheWrite: '缓存写入',
+      estCost: '估算成本（API 价）', avgDailyCost: '日均成本',
+      cacheTokens: '缓存 tokens', hitRate: 'Cache 命中率', todayTokens: '今日 tokens', weekTokens: '本周 tokens',
+      avgDailyCache: '平均每日缓存', cacheShare: '缓存占比',
+      nInput: '新输入', nOutput: '输出', nCacheRead: '缓存读取',
+      noRecord: '无记录', estCostTip: '估算成本', noRangeRecords: '该范围内无记录',
+      noteOfficial: '官方公开价', noteHalf: '无公开价，按官方文档折算半价', noteK27: 'K2.7 Code',
+      noDataTitle: '暂无数据',
+      noDataHint: '还没有可统计的 Kimi Code 会话记录。先用 Kimi Code 跑几轮对话，然后点右上角「刷新数据」，或运行 ./refresh.sh。',
+      noFileTitle: '还没有数据文件',
+      noFileHint: '请先在项目目录运行 <code>npm install</code> 和 <code>./refresh.sh</code> 生成数据，然后刷新本页；或直接运行 <code>./start.sh</code>。',
+      refreshFail: '刷新失败：\n', noServer: '无法连接本地服务。请先在项目目录运行：\n./start.sh',
+      clear: '清除', today: '今天',
+      weekdays: ['一', '二', '三', '四', '五', '六', '日'],
+      locale: 'zh-CN',
+    },
+    en: {
+      usage: 'Usage', pageTitle: 'Kimi Code Usage',
+      sub: 'Kimi Code token usage & activity stats · data from local session logs',
+      updatedAt: 'Updated', refresh: 'Refresh', refreshing: 'Refreshing…', startCmd: 'Start server:',
+      pToday: 'Today', p7: '7D', p14: '14D', p30: '30D', pAll: 'All',
+      toSep: 'to', apply: 'Apply', phStart: 'Start date', phEnd: 'End date',
+      heatTitleT: 'Token Activity', heatTitleC: 'Cost Activity', metricToken: 'Token', metricCost: 'Cost',
+      less: 'Less', more: 'More',
+      cardActivity: 'Activity', cardToken: 'Tokens', cardCache: 'Cache',
+      dailyTitle: 'Daily Token Breakdown', allModels: 'All models',
+      modelUsage: 'Usage by Model', modelHint: 'Sorted by total tokens (incl. cache read) · follows the time range above',
+      monthlyTitle: 'Monthly Summary', monthlyHint: 'Estimated cost at official API pricing (¥/1M tokens) · fixed to the full time range',
+      priceTitle: 'API Pricing Reference', priceHint: 'Official Kimi platform prices (¥ / 1M tokens) · cost estimates use this table',
+      thModel: 'Model', thInput: 'Input', thOutput: 'Output', thCacheRead: 'Cache read', thTotal: 'Total',
+      thCost: 'Est. cost', thMonth: 'Month', thCost2: 'Est. cost', thCacheHit: 'Cache hit', thNote: 'Note',
+      footer1: 'Source: real token counts returned by the server, from local <code>~/.kimi-code/sessions/**/wire.jsonl</code>, aggregated by ccusage. Nothing is uploaded.',
+      footer2: 'For subscription users, "Est. cost" is an equivalent reference "as if billed per API usage", not an actual charge.',
+      rangeLabel: 'Range: ',
+      totalTokens: 'Total tokens', peakDay: 'Peak day', avgSession: 'Avg per session',
+      curStreak: 'Current streak', bestStreak: 'Longest streak', rangeTokens: 'Tokens in range',
+      avgDaily: 'Daily avg (active days)', activeDaysRange: 'Active days / range', bestStreakRange: 'Longest streak in range',
+      daysUnit: 'days',
+      totalSessions: 'Total sessions', activeDays: 'Active days', bestDay: 'Best day', spanDays: 'Days in range',
+      inputTokens: 'Input tokens', outputTokens: 'Output tokens', cacheRead: 'Cache read', cacheWrite: 'Cache write',
+      estCost: 'Est. cost (API price)', avgDailyCost: 'Avg daily cost',
+      cacheTokens: 'Cache tokens', hitRate: 'Cache hit rate', todayTokens: 'Today tokens', weekTokens: 'This week tokens',
+      avgDailyCache: 'Avg daily cache', cacheShare: 'Cache share',
+      nInput: 'New input', nOutput: 'Output', nCacheRead: 'Cache read',
+      noRecord: 'No data', estCostTip: 'Est. cost', noRangeRecords: 'No records in this range',
+      noteOfficial: 'Official price', noteHalf: 'No public price; half rate per official docs', noteK27: 'K2.7 Code',
+      noDataTitle: 'No data yet',
+      noDataHint: 'No Kimi Code sessions to analyze yet. Have a few conversations first, then click "Refresh" in the top right, or run ./refresh.sh.',
+      noFileTitle: 'No data file yet',
+      noFileHint: 'Run <code>npm install</code> and <code>./refresh.sh</code> in the project directory to generate the data, then reload; or just run <code>./start.sh</code>.',
+      refreshFail: 'Refresh failed:\n', noServer: 'Cannot reach the local server. Run this in the project directory first:\n./start.sh',
+      clear: 'Clear', today: 'Today',
+      weekdays: ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'],
+      months: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+      locale: 'en-US',
+    },
+  };
+  let lang = localStorage.getItem('kimi-dash-lang') === 'en' ? 'en' : 'zh'; // 默认中文
+  let S = I18N[lang];
+  // 静态文案：data-i18n → innerHTML（词典是本站自有内容，含 <code> 标签）；data-i18n-ph → placeholder
+  function applyStatic() {
+    document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+    document.title = S.pageTitle;
+    document.querySelectorAll('[data-i18n]').forEach(el => { el.innerHTML = S[el.dataset.i18n]; });
+    document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = S[el.dataset.i18nPh]; });
+    document.getElementById('langBtn').textContent = lang === 'zh' ? 'EN' : 'CN'; // 按钮显示目标语言
+  }
   const D = window.DASHBOARD_DATA;
+  applyStatic();
   // data.js 缺失（还没跑过 ./refresh.sh）或结构不对时给出提示，而不是白屏报错
   if (!D || !Array.isArray(D.daily)) {
     document.querySelectorAll('.wrap > *:not(header)').forEach(el => el.remove());
     document.querySelector('.wrap').insertAdjacentHTML('beforeend',
-      '<div class="card"><h2>还没有数据文件</h2><div class="hint">请先在项目目录运行 ' +
-      '<code>npm install</code> 和 <code>./refresh.sh</code> 生成数据，然后刷新本页；或直接运行 <code>./start.sh</code>。</div></div>');
+      `<div class="card"><h2>${S.noFileTitle}</h2><div class="hint">${S.noFileHint}</div></div>`);
     document.getElementById('gen').textContent = '—';
     return;
   }
@@ -295,22 +397,21 @@
   if (!daily.length) {
     document.querySelectorAll('.wrap > *:not(header)').forEach(el => el.remove());
     document.querySelector('.wrap').insertAdjacentHTML('beforeend',
-      '<div class="card"><h2>暂无数据</h2><div class="hint">还没有可统计的 Kimi Code 会话记录。' +
-      '先用 Kimi Code 跑几轮对话，然后点右上角「刷新数据」，或运行 ./refresh.sh。</div></div>');
+      `<div class="card"><h2>${S.noDataTitle}</h2><div class="hint">${S.noDataHint}</div></div>`);
     document.getElementById('gen').textContent =
-      new Date(D.generatedAt).toLocaleString('zh-CN', { hour12: false });
+      new Date(D.generatedAt).toLocaleString(S.locale, { hour12: false });
     const btn = document.getElementById('refreshBtn');
     btn.addEventListener('click', async () => {
-      btn.disabled = true; btn.textContent = '刷新中…';
+      btn.disabled = true; btn.textContent = S.refreshing;
       try {
         const r = await fetch('/refresh', { method: 'POST' });
         const body = await r.json();
         if (body.ok) { location.reload(); return; }
-        alert('刷新失败：\n' + (body.log || '未知错误'));
+        alert(S.refreshFail + (body.log || '?'));
       } catch (e) {
-        alert('无法连接本地服务。请先在项目目录运行：\n./start.sh');
+        alert(S.noServer);
       }
-      btn.disabled = false; btn.textContent = '刷新数据';
+      btn.disabled = false; btn.textContent = S.refresh;
     });
     return;
   }
@@ -320,8 +421,13 @@
   const allModels = [...new Set(daily.flatMap(d => (d.modelBreakdowns || []).map(b => b.modelName)))].sort();
   const barSel = document.getElementById('barModelSel');
   // 用 DOM API 赋值而不是拼 innerHTML：既防 XSS，也不会把转义后的字符串当成 option 的值
-  barSel.add(new Option('全部模型', 'all'));
-  allModels.forEach(m => barSel.add(new Option(m, m)));
+  function rebuildBarSel() {
+    barSel.innerHTML = '';
+    barSel.add(new Option(S.allModels, 'all'));
+    allModels.forEach(m => barSel.add(new Option(m, m)));
+    barSel.value = selModel;
+  }
+  rebuildBarSel();
   barSel.addEventListener('change', e => {
     selModel = e.target.value;
     renderBars();
@@ -342,8 +448,14 @@
   }
 
   // ---------- helpers ----------
-  function fmt(n) { // 中文单位：万 / 亿
+  function fmt(n) { // 大数缩写：中文用 万/亿，英文用 K/M/B
     if (!Number.isFinite(n)) return '—'; // 数据异常兜底，别显示 NaN
+    if (lang === 'en') {
+      if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+      if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+      if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+      return n.toLocaleString('en-US');
+    }
     if (n >= 1e8) return (n / 1e8).toFixed(1) + ' 亿';
     if (n >= 1e4) return (n / 1e4).toFixed(1) + ' 万';
     return n.toLocaleString('en-US');
@@ -356,13 +468,16 @@
   // 官方 API 定价（¥ / 1M tokens）：https://platform.kimi.com/docs/pricing
   // k3-256k 无公开 API 价，按 Kimi Code 文档「k3 (1M) 配额消耗约为 k3-256k 的 2 倍」折算半价
   const PRICE = {
-    'k3':             { i: 20,  o: 100, cr: 2,   note: '官方公开价' },
-    'k3-256k':        { i: 10,  o: 50,  cr: 1,   note: '无公开价，按官方文档折算半价' },
-    'kimi-for-coding':{ i: 6.5, o: 27,  cr: 1.3, note: 'K2.7 Code' },
+    'k3':             { i: 20,  o: 100, cr: 2,   note: 'noteOfficial' },
+    'k3-256k':        { i: 10,  o: 50,  cr: 1,   note: 'noteHalf' },
+    'kimi-for-coding':{ i: 6.5, o: 27,  cr: 1.3, note: 'noteK27' },
   };
-  document.querySelector('#priceTable tbody').innerHTML = Object.entries(PRICE).map(([m, p]) =>
-    `<tr><td style="text-align:left">${m}</td><td>${p.i}</td><td>${p.cr}</td><td>${p.o}</td><td class="dim" style="text-align:left">${p.note}</td></tr>`
-  ).join('');
+  function renderPrice() {
+    document.querySelector('#priceTable tbody').innerHTML = Object.entries(PRICE).map(([m, p]) =>
+      `<tr><td style="text-align:left">${m}</td><td>${p.i}</td><td>${p.cr}</td><td>${p.o}</td><td class="dim" style="text-align:left">${S[p.note]}</td></tr>`
+    ).join('');
+  }
+  renderPrice();
   const costOf = mb => {
     const p = PRICE[mb.modelName];
     if (!p) return 0;
@@ -370,7 +485,6 @@
   };
   const fmtCost = c => !Number.isFinite(c) ? '—' : '¥' + (c >= 100 ? c.toFixed(0) : c.toFixed(2));
   const C = { input: '#6366f1', output: '#10b981', cacheRead: '#c7d2fe', cacheCreation: '#fbbf24' };
-  const NAMES = { input: '新输入', output: '输出', cacheRead: '缓存读取', cacheCreation: '缓存写入' };
   const sum = (arr, f) => arr.reduce((s, x) => s + f(x), 0);
 
   const tooltip = document.getElementById('tooltip');
@@ -389,8 +503,11 @@
   const firstDate = daily[0].date;
 
   // ---------- header ----------
-  document.getElementById('gen').textContent =
-    new Date(D.generatedAt).toLocaleString('zh-CN', { hour12: false });
+  function renderGen() {
+    document.getElementById('gen').textContent =
+      new Date(D.generatedAt).toLocaleString(S.locale, { hour12: false });
+  }
+  renderGen();
 
   // ---------- global stats (不受时间范围影响) ----------
   const dateSet = new Set(daily.map(d => d.date));
@@ -439,17 +556,19 @@
     const r = v / (heatMetric === 'cost' ? maxC : maxT);
     return HEAT[r < 0.15 ? 1 : r < 0.35 ? 2 : r < 0.65 ? 3 : 4];
   }
-  let labels = '', lastM = '', lastLabelIdx = -99;
-  weeks.forEach((wk, wi) => {
-    const ds = wk.find(Boolean);
-    const m = ds ? ds.slice(0, 7) : '';
-    if (m && m !== lastM && wi - lastLabelIdx >= 3) {
-      labels += `<span>${+m.slice(5)}月</span>`; lastM = m; lastLabelIdx = wi;
-    }
-    else labels += '<span></span>';
-  });
   const heatEl = document.getElementById('heatmap');
   function renderHeat() {
+    // 月份标签随语言变化（zh: 8月；en: Aug），所以放在渲染函数里重算
+    let labels = '', lastM = '', lastLabelIdx = -99;
+    weeks.forEach((wk, wi) => {
+      const ds = wk.find(Boolean);
+      const m = ds ? ds.slice(0, 7) : '';
+      if (m && m !== lastM && wi - lastLabelIdx >= 3) {
+        labels += `<span>${lang === 'en' ? S.months[+m.slice(5) - 1] : +m.slice(5) + '月'}</span>`;
+        lastM = m; lastLabelIdx = wi;
+      }
+      else labels += '<span></span>';
+    });
     let heatHtml = '';
     weeks.forEach(wk => {
       heatHtml += '<div class="wk">';
@@ -463,13 +582,17 @@
     });
     heatEl.innerHTML = `<div class="month-labels">${labels}</div><div class="heat">${heatHtml}</div>`;
   }
+  function renderHeatTitle() {
+    document.getElementById('heatTitle').textContent = heatMetric === 'cost' ? S.heatTitleC : S.heatTitleT;
+  }
+  renderHeatTitle();
   renderHeat();
   document.getElementById('heatMetricTabs').addEventListener('click', e => {
     const b = e.target.closest('button');
     if (!b || b.dataset.m === heatMetric) return;
     heatMetric = b.dataset.m;
     document.querySelectorAll('#heatMetricTabs button').forEach(x => x.classList.toggle('on', x === b));
-    document.getElementById('heatTitle').textContent = heatMetric === 'cost' ? '费用活跃度' : 'Token 活跃度';
+    renderHeatTitle();
     renderHeat();
   });
   document.getElementById('heatRange').textContent = iso(heatStart) + ' - ' + todayStr;
@@ -479,7 +602,7 @@
     const el = e.target.closest('.d');
     if (!el || !el.dataset.d) { hideTip(); return; }
     const v = +el.dataset.v;
-    showTip(`<div class="t">${el.dataset.d}</div>${v ? (heatMetric === 'cost' ? fmtCost(v) : fmt(v) + ' tokens') : '无记录'}`, e.clientX, e.clientY);
+    showTip(`<div class="t">${el.dataset.d}</div>${v ? (heatMetric === 'cost' ? fmtCost(v) : fmt(v) + ' tokens') : S.noRecord}`, e.clientX, e.clientY);
   });
   heatEl.addEventListener('mouseleave', hideTip);
   heatEl.addEventListener('mousedown', hideTip);
@@ -512,59 +635,59 @@
     const hitRate = cr / Math.max(cr + inp, 1);
     const cost = sum(days, d => sum(d.modelBreakdowns || [], costOf));
 
-    document.getElementById('rangeLabel').textContent = `统计范围：${rangeStart} ~ ${rangeEnd}`;
+    document.getElementById('rangeLabel').textContent = `${S.rangeLabel}${rangeStart} ~ ${rangeEnd}`;
     document.getElementById('barRange').textContent = `${rangeStart} ~ ${rangeEnd}`;
 
     // strip
     const cells = all ? [
-      { v: fmt(tot), l: '累计 tokens' },
-      { v: best ? fmt(best.totalTokens) : '—', l: best ? '单日峰值 · ' + best.date.slice(5) : '单日峰值' },
-      { v: fmt(Math.round(tot / Math.max(D.sessions.length, 1))), l: '平均每会话' },
-      { v: curStreak + ' <small>天</small>', l: '当前连续' },
-      { v: rangeBestStreak + ' <small>天</small>', l: '最长连续' },
+      { v: fmt(tot), l: S.totalTokens },
+      { v: best ? fmt(best.totalTokens) : '—', l: best ? S.peakDay + ' · ' + best.date.slice(5) : S.peakDay },
+      { v: fmt(Math.round(tot / Math.max(D.sessions.length, 1))), l: S.avgSession },
+      { v: curStreak + ` <small>${S.daysUnit}</small>`, l: S.curStreak },
+      { v: rangeBestStreak + ` <small>${S.daysUnit}</small>`, l: S.bestStreak },
     ] : [
-      { v: fmt(tot), l: '范围内 tokens' },
-      { v: best ? fmt(best.totalTokens) : '—', l: best ? '单日峰值 · ' + best.date.slice(5) : '单日峰值' },
-      { v: fmt(Math.round(tot / Math.max(days.length, 1))), l: '平均每日（活跃日）' },
-      { v: `${days.length} <small>/ ${spanDays} 天</small>`, l: '活跃天数 / 范围' },
-      { v: rangeBestStreak + ' <small>天</small>', l: '范围内最长连续' },
+      { v: fmt(tot), l: S.rangeTokens },
+      { v: best ? fmt(best.totalTokens) : '—', l: best ? S.peakDay + ' · ' + best.date.slice(5) : S.peakDay },
+      { v: fmt(Math.round(tot / Math.max(days.length, 1))), l: S.avgDaily },
+      { v: `${days.length} <small>/ ${spanDays} ${S.daysUnit}</small>`, l: S.activeDaysRange },
+      { v: rangeBestStreak + ` <small>${S.daysUnit}</small>`, l: S.bestStreakRange },
     ];
     document.getElementById('strip').innerHTML =
       cells.map(c => `<div class="cell"><div class="v">${c.v}</div><div class="l">${c.l}</div></div>`).join('');
 
     // metric cards
     kv('kvActivity', all ? [
-      ['总会话数', D.sessions.length],
-      ['活跃天数', days.length],
-      ['平均每会话', fmt(Math.round(tot / Math.max(D.sessions.length, 1)))],
-      ['最佳单日', best ? fmt(best.totalTokens) : '—'],
+      [S.totalSessions, D.sessions.length],
+      [S.activeDays, days.length],
+      [S.avgSession, fmt(Math.round(tot / Math.max(D.sessions.length, 1)))],
+      [S.bestDay, best ? fmt(best.totalTokens) : '—'],
     ] : [
-      ['活跃天数', days.length],
-      ['范围天数', spanDays],
-      ['平均每日（活跃日）', fmt(Math.round(tot / Math.max(days.length, 1)))],
-      ['最佳单日', best ? fmt(best.totalTokens) : '—'],
+      [S.activeDays, days.length],
+      [S.spanDays, spanDays],
+      [S.avgDaily, fmt(Math.round(tot / Math.max(days.length, 1)))],
+      [S.bestDay, best ? fmt(best.totalTokens) : '—'],
     ]);
     kv('kvToken', [
-      ['输入 tokens', fmt(inp)],
-      ['输出 tokens', fmt(out)],
-      ['缓存读取', fmt(cr)],
-      ['缓存写入', fmt(cw)],
-      ['估算成本（API 价）', fmtCost(cost)],
-      ['日均成本', fmtCost(cost / Math.max(days.length, 1))],
+      [S.inputTokens, fmt(inp)],
+      [S.outputTokens, fmt(out)],
+      [S.cacheRead, fmt(cr)],
+      [S.cacheWrite, fmt(cw)],
+      [S.estCost, fmtCost(cost)],
+      [S.avgDailyCost, fmtCost(cost / Math.max(days.length, 1))],
     ]);
     kv('kvCache', all ? [
-      ['缓存 tokens', fmt(cr)],
-      ['Cache 命中率', (hitRate * 100).toFixed(1) + '%'],
-      ['今日 tokens', fmt((byDate[todayStr] || {}).totalTokens || 0)],
-      ['本周 tokens', fmt(daily.filter(d => {
+      [S.cacheTokens, fmt(cr)],
+      [S.hitRate, (hitRate * 100).toFixed(1) + '%'],
+      [S.todayTokens, fmt((byDate[todayStr] || {}).totalTokens || 0)],
+      [S.weekTokens, fmt(daily.filter(d => {
         const ws = new Date(today); ws.setDate(today.getDate() - ((today.getDay() + 6) % 7));
         return d.date >= iso(ws);
       }).reduce((s, d) => s + d.totalTokens, 0))],
     ] : [
-      ['缓存 tokens', fmt(cr)],
-      ['Cache 命中率', (hitRate * 100).toFixed(1) + '%'],
-      ['平均每日缓存', fmt(Math.round(cr / Math.max(days.length, 1)))],
-      ['缓存占比', (cr / Math.max(tot, 1) * 100).toFixed(1) + '%'],
+      [S.cacheTokens, fmt(cr)],
+      [S.hitRate, (hitRate * 100).toFixed(1) + '%'],
+      [S.avgDailyCache, fmt(Math.round(cr / Math.max(days.length, 1)))],
+      [S.cacheShare, (cr / Math.max(tot, 1) * 100).toFixed(1) + '%'],
     ]);
 
     renderBars();
@@ -607,19 +730,22 @@
     svg += '</svg>';
     document.getElementById('bars').innerHTML = svg;
   }
-  document.getElementById('barLegend').innerHTML =
-    ['input', 'output', 'cacheRead'].map(k =>
-      `<span class="it"><span class="sw" style="background:${C[k]}"></span>${NAMES[k]}</span>`).join('');
+  function renderBarLegend() {
+    document.getElementById('barLegend').innerHTML =
+      [['input', S.nInput], ['output', S.nOutput], ['cacheRead', S.nCacheRead]].map(([k, name]) =>
+        `<span class="it"><span class="sw" style="background:${C[k]}"></span>${name}</span>`).join('');
+  }
+  renderBarLegend();
   document.getElementById('bars').addEventListener('mousemove', e => {
     const el = e.target.closest('.bar');
     if (!el) { hideTip(); return; }
     const ds = el.dataset.d, rec = dayRec(ds); // 跟随模型筛选，与柱子高度的口径一致
-    if (!rec) { showTip(`<div class="t">${ds}</div>无记录`, e.clientX, e.clientY); return; }
+    if (!rec) { showTip(`<div class="t">${ds}</div>${S.noRecord}`, e.clientX, e.clientY); return; }
     showTip(`<div class="t">${ds} · ${fmt(rec.totalTokens)}</div>` +
-      `<div><span class="sw" style="background:${C.input}"></span>新输入 ${fmtFull(rec.inputTokens)}</div>` +
-      `<div><span class="sw" style="background:${C.output}"></span>输出 ${fmtFull(rec.outputTokens)}</div>` +
-      `<div><span class="sw" style="background:${C.cacheRead}"></span>缓存读取 ${fmtFull(rec.cacheReadTokens)}</div>` +
-      `<div style="margin-top:3px;border-top:1px solid var(--divider);padding-top:3px">估算成本 ${fmtCost(rec.cost != null ? rec.cost : sum(rec.modelBreakdowns || [], costOf))}</div>`,
+      `<div><span class="sw" style="background:${C.input}"></span>${S.nInput} ${fmtFull(rec.inputTokens)}</div>` +
+      `<div><span class="sw" style="background:${C.output}"></span>${S.nOutput} ${fmtFull(rec.outputTokens)}</div>` +
+      `<div><span class="sw" style="background:${C.cacheRead}"></span>${S.nCacheRead} ${fmtFull(rec.cacheReadTokens)}</div>` +
+      `<div style="margin-top:3px;border-top:1px solid var(--divider);padding-top:3px">${S.estCostTip} ${fmtCost(rec.cost != null ? rec.cost : sum(rec.modelBreakdowns || [], costOf))}</div>`,
       e.clientX, e.clientY);
   });
   document.getElementById('bars').addEventListener('mouseleave', hideTip);
@@ -639,7 +765,7 @@
       ? rows.map(([name, m]) =>
         `<tr><td style="text-align:left;font-weight:620">${esc(name)}</td><td>${fmt(m.input)}</td><td>${fmt(m.output)}</td>` +
         `<td>${fmt(m.cacheRead)}</td><td><b>${fmt(m.total)}</b></td><td class="dim">≈ ${fmtCost(m.cost)}</td></tr>`).join('')
-      : '<tr><td colspan="6" style="text-align:left" class="dim">该范围内无记录</td></tr>';
+      : `<tr><td colspan="6" style="text-align:left" class="dim">${S.noRangeRecords}</td></tr>`;
   }
 
   // ---------- 范围选择交互 ----------
@@ -691,9 +817,10 @@
     function render() {
       const firstWd = (new Date(viewY, viewM, 1).getDay() + 6) % 7; // 周一开头
       const daysIn = new Date(viewY, viewM + 1, 0).getDate();
+      const title = lang === 'en' ? `${S.months[viewM]} ${viewY}` : `${viewY}年${pad(viewM + 1)}月`;
       let h = `<div class="dp-head"><button data-a="-1">‹</button>` +
-        `<span class="t">${viewY}年${pad(viewM + 1)}月</span><button data-a="1">›</button></div>`;
-      h += '<div class="dp-grid">' + ['一', '二', '三', '四', '五', '六', '日']
+        `<span class="t">${title}</span><button data-a="1">›</button></div>`;
+      h += '<div class="dp-grid">' + S.weekdays
         .map(w => `<span class="wd">${w}</span>`).join('');
       for (let i = 0; i < firstWd; i++) h += '<span></span>';
       for (let d = 1; d <= daysIn; d++) {
@@ -704,7 +831,7 @@
         if (ds === input.value) cls += ' sel';
         h += `<span class="${cls}" data-d="${ds}">${d}</span>`;
       }
-      h += '</div><div class="dp-foot"><button data-a="clear">清除</button><button data-a="today">今天</button></div>';
+      h += `</div><div class="dp-foot"><button data-a="clear">${S.clear}</button><button data-a="today">${S.today}</button></div>`;
       pop.innerHTML = h;
     }
     input.addEventListener('click', open);
@@ -785,11 +912,26 @@
   }
   renderRange();
 
+  // ---------- 语言切换 ----------
+  document.getElementById('langBtn').addEventListener('click', () => {
+    lang = lang === 'zh' ? 'en' : 'zh';
+    S = I18N[lang];
+    localStorage.setItem('kimi-dash-lang', lang);
+    applyStatic();
+    renderGen();
+    renderPrice();
+    renderHeatTitle();
+    renderHeat();
+    rebuildBarSel();
+    renderBarLegend();
+    renderRange(); // 内部会调 renderBars / renderModels
+  });
+
   // ---------- 刷新按钮 ----------
   const refreshBtn = document.getElementById('refreshBtn');
   refreshBtn.addEventListener('click', async () => {
     refreshBtn.disabled = true;
-    refreshBtn.textContent = '刷新中…';
+    refreshBtn.textContent = S.refreshing;
     try {
       const r = await fetch('/refresh', { method: 'POST' });
       const body = await r.json();
@@ -802,12 +944,12 @@
         location.search = q.toString();
         return;
       }
-      alert('刷新失败：\n' + (body.log || '未知错误'));
+      alert(S.refreshFail + (body.log || '?'));
     } catch (e) {
-      alert('无法连接本地服务。请先在项目目录运行：\n./start.sh');
+      alert(S.noServer);
     }
     refreshBtn.disabled = false;
-    refreshBtn.textContent = '刷新数据';
+    refreshBtn.textContent = S.refresh;
   });
 })();
 </script>
