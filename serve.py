@@ -18,13 +18,18 @@ class Handler(SimpleHTTPRequestHandler):
     def end_headers(self):
         # data.js / 页面禁止缓存，保证刷新后拿到新数据和新页面（self.path 含查询串，先去掉）
         p = self.path.split("?", 1)[0]
-        if p.startswith("/data.js") or p.endswith(".html") or p == "/":
+        if p == "/data.js" or p.endswith(".html") or p == "/":
             self.send_header("Cache-Control", "no-store")
         super().end_headers()
 
     def do_POST(self):
         if self.path != "/refresh":
             self.send_error(404)
+            return
+        # CSRF 防护：浏览器跨站 POST 必带 Origin，只放行本页面同源请求和本地无 Origin 的调用
+        origin = self.headers.get("Origin")
+        if origin and origin not in (f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}"):
+            self.send_error(403)
             return
         with _lock:  # 防止并发重复跑
             try:

@@ -275,12 +275,36 @@
   const daily = D.daily.slice().sort((a, b) => a.date < b.date ? -1 : 1);
   const byDate = Object.fromEntries(daily.map(d => [d.date, d]));
 
+  // 空数据兜底：还没有会话日志时直接提示，避免后续 daily[0] 等访问崩溃
+  if (!daily.length) {
+    document.querySelectorAll('.wrap > *:not(header)').forEach(el => el.remove());
+    document.querySelector('.wrap').insertAdjacentHTML('beforeend',
+      '<div class="card"><h2>暂无数据</h2><div class="hint">还没有可统计的 Kimi Code 会话记录。' +
+      '先用 Kimi Code 跑几轮对话，然后点右上角「刷新数据」，或运行 ./refresh.sh。</div></div>');
+    document.getElementById('gen').textContent =
+      new Date(D.generatedAt).toLocaleString('zh-CN', { hour12: false });
+    const btn = document.getElementById('refreshBtn');
+    btn.addEventListener('click', async () => {
+      btn.disabled = true; btn.textContent = '刷新中…';
+      try {
+        const r = await fetch('/refresh', { method: 'POST' });
+        const body = await r.json();
+        if (body.ok) { location.reload(); return; }
+        alert('刷新失败：\n' + (body.log || '未知错误'));
+      } catch (e) {
+        alert('无法连接本地服务。请先在项目目录运行：\n./start.sh');
+      }
+      btn.disabled = false; btn.textContent = '刷新数据';
+    });
+    return;
+  }
+
   // ---------- 柱状图模型筛选 ----------
   let selModel = 'all';
   const allModels = [...new Set(daily.flatMap(d => (d.modelBreakdowns || []).map(b => b.modelName)))].sort();
   document.getElementById('barModelSel').innerHTML =
     `<option value="all">全部模型</option>` +
-    allModels.map(m => `<option value="${m}">${m}</option>`).join('');
+    allModels.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
   document.getElementById('barModelSel').addEventListener('change', e => {
     selModel = e.target.value;
     renderBars();
@@ -307,6 +331,10 @@
     return n.toLocaleString('en-US');
   }
   const fmtFull = n => n.toLocaleString('en-US');
+  // HTML 转义：modelName 等字段来自本机日志，拼进 innerHTML 前必须转义防 DOM XSS
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // 用 UTC 午夜算日期序号，避免夏令时时区下 86400000 硬编码误判相邻日/跨度
+  const dayNum = ds => Date.UTC(+ds.slice(0, 4), +ds.slice(5, 7) - 1, +ds.slice(8, 10)) / 86400000;
   // 官方 API 定价（¥ / 1M tokens）：https://platform.kimi.com/docs/pricing
   // k3-256k 无公开 API 价，按 Kimi Code 文档「k3 (1M) 配额消耗约为 k3-256k 的 2 倍」折算半价
   const PRICE = {
@@ -358,8 +386,8 @@
   function longestStreak(days) {
     let best = 0, run = 0, prev = null;
     for (const d of days) {
-      const cur = new Date(d.date);
-      run = (prev && (cur - prev) === 86400000) ? run + 1 : 1;
+      const cur = dayNum(d.date);
+      run = (prev !== null && cur - prev === 1) ? run + 1 : 1;
       best = Math.max(best, run);
       prev = cur;
     }
@@ -436,7 +464,7 @@
 
   function renderRange() {
     const days = daily.filter(d => d.date >= rangeStart && d.date <= rangeEnd);
-    const spanDays = Math.round((new Date(rangeEnd) - new Date(rangeStart)) / 86400000) + 1;
+    const spanDays = dayNum(rangeEnd) - dayNum(rangeStart) + 1;
     const tot = sum(days, d => d.totalTokens);
     const inp = sum(days, d => d.inputTokens);
     const out = sum(days, d => d.outputTokens);
@@ -575,7 +603,7 @@
     const rows = Object.entries(models).sort((a, b) => b[1].total - a[1].total);
     document.querySelector('#modelTable tbody').innerHTML = rows.length
       ? rows.map(([name, m]) =>
-        `<tr><td style="text-align:left;font-weight:620">${name}</td><td>${fmt(m.input)}</td><td>${fmt(m.output)}</td>` +
+        `<tr><td style="text-align:left;font-weight:620">${esc(name)}</td><td>${fmt(m.input)}</td><td>${fmt(m.output)}</td>` +
         `<td>${fmt(m.cacheRead)}</td><td><b>${fmt(m.total)}</b></td><td class="dim">≈ ${fmtCost(m.cost)}</td></tr>`).join('')
       : '<tr><td colspan="6" style="text-align:left" class="dim">该范围内无记录</td></tr>';
   }
@@ -727,8 +755,11 @@
       const body = await r.json();
       if (body.ok) {
         // 把当前选中的时间范围写进 URL，刷新后恢复同一视图（直接进页面无参数则回到默认近 7 日）
-        const qs = activePreset ? `?p=${activePreset}` : `?s=${rangeStart}&e=${rangeEnd}`;
-        location.href = location.pathname + qs;
+        const q = new URLSearchParams(location.search);
+        q.delete('p'); q.delete('s'); q.delete('e');
+        if (activePreset) q.set('p', activePreset);
+        else { q.set('s', rangeStart); q.set('e', rangeEnd); }
+        location.search = q.toString();
         return;
       }
       alert('刷新失败：\n' + (body.log || '未知错误'));
