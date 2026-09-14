@@ -1,7 +1,7 @@
 {
   "name": "kimi-usage-dashboard",
-  "version": "1.0.0",
-  "description": "Kimi Code token 用量本地仪表盘：基于本机会话日志的可视化统计",
+  "version": "2.0.0",
+  "description": "本机全 Agent token 用量仪表盘：Kimi/Codex/DimCode/CommandCode/Devin/KimiX/OpenCode/Kilo/Cursor/Antigravity 等本地日志的可视化统计",
   "scripts": {
     "start": "./start.sh",
     "refresh": "./refresh.sh"
@@ -9,6 +9,13 @@
   "keywords": [
     "kimi",
     "kimi-code",
+    "codex",
+    "claude",
+    "cursor",
+    "devin",
+    "dimcode",
+    "commandcode",
+    "antigravity",
     "token-usage",
     "dashboard",
     "ccusage"

@@ -3,244 +3,474 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kimi Code 用量</title>
+<title>Agent 用量</title>
 <style>
   :root {
-    --bg: #f4f4f6;
+    --bg: #f8f9fb;
     --card: #ffffff;
-    --border: #e8e8ec;
-    --divider: #efeff2;
-    --text: #17171c;
-    --dim: #8a8f99;
-    --blue: #3b82f6;
-    --green: #22c55e;
-    --gray-bar: #d6d6db;
+    --border: #e6e8ec;
+    --border-hover: #cbd5e1;
+    --divider: #f0f1f4;
+    --text: #0f172a;
+    --text-secondary: #334155;
+    --dim: #64748b;
+    --faint: #64748b;
+    --primary: #2563eb;
+    --primary-light: #eff6ff;
+    --primary-border: #bfdbfe;
+
+    /* Token 分色：清爽明亮、高对比度 */
+    --c-input: #4f46e5;
+    --c-output: #059669;
+    --c-cache: #38bdf8;
+    --c-write: #f59e0b;
+    --c-cost: #6366f1;
+    --c-events: #0ea5e9;
+
+    --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.02);
+    --shadow-pop: 0 12px 30px -4px rgba(15, 23, 42, 0.12), 0 4px 6px -2px rgba(15, 23, 42, 0.04);
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  :focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
   body {
     background: var(--bg);
     color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
-    padding: 44px 24px 64px;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    padding: 36px 20px 60px;
     -webkit-font-smoothing: antialiased;
+    font-variant-numeric: tabular-nums;
   }
-  .wrap { max-width: 1040px; margin: 0 auto; }
+  .wrap { max-width: 1060px; margin: 0 auto; }
 
-  header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
-  h1 { font-size: 24px; font-weight: 700; }
-  header .sub { color: var(--dim); font-size: 13.5px; margin-top: 6px; }
-  .meta { color: var(--dim); font-size: 12.5px; text-align: right; line-height: 1.7; }
-  .head-side { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
-  #langBtn {
-    border: 1px solid var(--border); background: #fff; color: var(--text); border-radius: 8px;
-    padding: 4px 12px; font-size: 12px; cursor: pointer; font-family: inherit;
+  /* Header */
+  header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 20px; flex-wrap: wrap; gap: 14px; }
+  .brand { display: flex; align-items: baseline; gap: 10px; }
+  h1 { font-size: 23px; font-weight: 700; letter-spacing: -0.02em; color: var(--text); }
+  .badge-tag {
+    font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 6px;
+    background: #e0f2fe; color: #0369a1; letter-spacing: 0.02em; text-transform: uppercase;
   }
-  #langBtn:hover { border-color: var(--blue); color: var(--blue); }
-  .meta code { background: #ececef; padding: 2px 8px; border-radius: 6px; font-size: 11.5px; color: #5b6270; }
-  #refreshBtn {
-    border: 1px solid var(--border); background: #fff; color: var(--text); border-radius: 8px;
-    padding: 4px 12px; font-size: 12px; cursor: pointer; font-family: inherit; margin-left: 8px;
+  header .sub { color: var(--dim); font-size: 13px; margin-top: 5px; }
+  .head-side { display: flex; flex-direction: column; align-items: flex-end; gap: 7px; }
+  .head-actions { display: flex; align-items: center; gap: 8px; }
+  .btn-subtle {
+    border: 1px solid var(--border); background: #fff; color: var(--text-secondary); border-radius: 8px;
+    padding: 5px 12px; font-size: 12px; font-weight: 500; cursor: pointer; font-family: inherit;
+    transition: all 0.15s ease;
   }
-  #refreshBtn:hover { border-color: var(--blue); color: var(--blue); }
-  #refreshBtn:disabled { opacity: .5; cursor: wait; }
+  .btn-subtle:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+  .btn-subtle:disabled { opacity: .5; cursor: wait; }
+  .meta { color: var(--dim); font-size: 12px; text-align: right; line-height: 1.6; }
+  .meta code { background: #eef0f3; padding: 2px 6px; border-radius: 5px; font-size: 11px; color: #475569; }
 
+  /* Card */
   .card {
     background: var(--card); border: 1px solid var(--border); border-radius: 14px;
-    padding: 22px 26px; margin-bottom: 16px;
-    box-shadow: 0 1px 2px rgba(20, 20, 40, 0.03);
+    padding: 20px 24px; margin-bottom: 16px;
+    box-shadow: var(--shadow-card); min-width: 0;
   }
-  .card h2 { font-size: 15.5px; font-weight: 650; margin-bottom: 3px; }
-  .card .hint { color: var(--dim); font-size: 12.5px; margin-bottom: 18px; }
-  .card-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 18px; }
-  .card-head h2 { margin: 0; }
-  .card-head .range { color: var(--dim); font-size: 12.5px; }
-  .card-head .head-right { display: flex; align-items: center; gap: 10px; }
-  .bar-model-sel {
-    font-size: 12.5px; color: var(--text); background: #fff;
-    border: 1px solid var(--divider); border-radius: 8px; padding: 4px 8px;
-    cursor: pointer; outline: none;
-  }
-  .bar-model-sel:hover { border-color: var(--blue); }
+  .card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
+  .card h2 { font-size: 15px; font-weight: 700; color: var(--text); letter-spacing: -0.01em; margin: 0; }
+  .card .hint { color: var(--dim); font-size: 12px; margin-top: 3px; }
+  .card-head .range { color: var(--dim); font-size: 12px; font-weight: 500; }
+  .card-head .head-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
-  /* range bar */
-  .rangebar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 14px 26px; }
-  .rangebar .custom { display: flex; align-items: center; gap: 8px; color: var(--dim); font-size: 12.5px; }
-  .rangebar .dp-input {
-    border: 1px solid var(--border); border-radius: 10px; padding: 6px 10px; width: 108px;
-    font-size: 12.5px; color: var(--text); font-family: inherit; background: #fff;
-    cursor: pointer; text-align: center;
-  }
-  .rangebar .dp-input:hover { border-color: var(--blue); }
-  .rangebar .dp-input::placeholder { color: #b6bac2; }
-
-  /* custom date picker popup */
-  .dp-pop {
-    position: fixed; z-index: 20; width: 264px; padding: 14px 16px 12px;
-    background: #fff; border: 1px solid var(--border); border-radius: 16px;
-    box-shadow: 0 14px 40px rgba(20, 20, 40, .14); user-select: none;
-  }
-  .dp-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-  .dp-head .t { font-weight: 650; font-size: 14px; }
-  .dp-head button {
-    border: none; background: transparent; cursor: pointer; font-size: 15px; line-height: 1;
-    color: var(--dim); padding: 5px 9px; border-radius: 8px; font-family: inherit;
-  }
-  .dp-head button:hover { background: #f0f0f3; color: var(--text); }
-  .dp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; }
-  .dp-grid .wd { color: var(--dim); font-size: 11px; padding: 4px 0; }
-  .dp-grid .day { font-size: 12.5px; padding: 6px 0; border-radius: 9px; cursor: pointer; }
-  .dp-grid .day:hover { background: #f0f0f3; }
-  .dp-grid .day.tod { color: var(--blue); font-weight: 650; }
-  .dp-grid .day.sel { background: var(--blue); color: #fff; font-weight: 650; }
-  .dp-grid .day.sel:hover { background: var(--blue); }
-  .dp-grid .day.dis { color: #cfcfd6; cursor: default; }
-  .dp-grid .day.dis:hover { background: none; }
-  .dp-foot { display: flex; justify-content: space-between; margin-top: 10px; }
-  .dp-foot button {
-    border: none; background: transparent; cursor: pointer; font-size: 12.5px;
-    color: var(--blue); padding: 4px 6px; border-radius: 8px; font-family: inherit;
-  }
-  .dp-foot button:hover { background: #eef4fe; }
-  .rangebar #dApply {
-    border: none; background: var(--blue); color: #fff; border-radius: 8px;
-    padding: 6px 14px; font-size: 12.5px; cursor: pointer; font-family: inherit;
-  }
-  .rangebar #rangeLabel { margin-left: auto; color: var(--dim); font-size: 12.5px; }
-
-  /* top stat strip */
-  .strip { display: grid; grid-template-columns: repeat(5, 1fr); padding: 24px 0; }
-  .strip .cell { text-align: center; padding: 0 10px; border-left: 1px solid var(--divider); }
-  .strip .cell:first-child { border-left: none; }
-  .strip .v { font-size: 25px; font-weight: 720; letter-spacing: -.3px; }
-  .strip .v small { font-size: 14px; font-weight: 500; color: var(--dim); }
-  .strip .l { color: var(--dim); font-size: 12.5px; margin-top: 6px; }
-  @media (max-width: 820px) { .strip { grid-template-columns: repeat(2, 1fr); row-gap: 20px; } .strip .cell:nth-child(3) { border-left: none; } }
-
-  /* metric cards */
-  .row3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-  @media (max-width: 860px) { .row3 { grid-template-columns: 1fr; } }
-  .kv { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 16px; margin-top: 14px; }
-  .kv .k { color: var(--dim); font-size: 12.5px; margin-bottom: 5px; }
-  .kv .v { font-size: 21px; font-weight: 700; }
-
-  /* heatmap */
-  .heat-scroll { padding-bottom: 4px; }
-  .heat { display: flex; gap: 3px; width: 100%; }
-  #heatmap, #bars { user-select: none; -webkit-user-select: none; }
-  .heat .wk { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-  .heat .d { width: 100%; aspect-ratio: 1 / 1; border-radius: 22%; background: #ebedf0; }
-  .heat-legend { display: flex; align-items: center; gap: 4px; color: var(--dim); font-size: 11.5px; margin-top: 12px; justify-content: flex-end; }
-  .heat-legend .d { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
-  .month-labels { display: flex; color: var(--dim); font-size: 11px; margin-bottom: 6px; width: 100%; }
-  .month-labels span { flex: 1; white-space: nowrap; overflow: visible; min-width: 0; }
-
-  /* toggle tabs */
-  .tabs { display: inline-flex; background: #f0f0f3; border-radius: 9px; padding: 3px; }
+  /* Tabs / Segmented Controls */
+  .tabs { display: inline-flex; background: #eef1f5; border-radius: 8px; padding: 2.5px; gap: 2px; }
   .tabs button {
-    border: none; background: transparent; padding: 5px 14px; border-radius: 7px;
-    font-size: 12.5px; color: var(--dim); cursor: pointer; font-family: inherit;
+    border: none; background: transparent; padding: 4.5px 12px; border-radius: 6.5px;
+    font-size: 12px; font-weight: 500; color: var(--text-secondary); cursor: pointer; font-family: inherit;
+    transition: all 0.15s ease;
   }
+  .tabs button:hover:not(.on) { color: var(--text); }
   .tabs button.on { background: #fff; color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
 
-  /* charts */
+  /* Agent Selector Bar */
+  .agentbar { display: flex; align-items: center; gap: 8px; padding: 10px 24px; flex-wrap: wrap; }
+  .agentbar .ab-label { color: var(--dim); font-size: 12px; font-weight: 500; white-space: nowrap; flex: 0 0 auto; }
+  .agent-sel {
+    font-size: 12.5px; color: var(--text); background: #fff; font-family: inherit;
+    border: 1px solid var(--border); border-radius: 7px; padding: 5px 26px 5px 9px;
+    cursor: pointer; outline: none; transition: border-color 0.15s;
+    min-width: 160px; max-width: 220px; text-overflow: ellipsis;
+    appearance: none; -webkit-appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M1 1l4 4 4-4' stroke='%2364748b' stroke-width='1.5' fill='none' stroke-linecap='round'/></svg>");
+    background-repeat: no-repeat; background-position: right 9px center;
+  }
+  .agent-sel:hover { border-color: var(--primary); }
+
+  /* 模型树形下拉（开发商 → 模型，默认折叠） */
+  .msel { position: relative; flex: 0 0 auto; }
+  .msel-btn { display: inline-flex; align-items: center; justify-content: space-between; gap: 6px; text-align: left; background-image: none; padding-right: 9px; }
+  .msel-btn span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .msel-arrow { color: var(--dim); font-size: 10px; flex: 0 0 auto; }
+  .msel-panel {
+    display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 60;
+    min-width: 240px; max-width: 340px; max-height: 340px; overflow-y: auto;
+    background: #fff; border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12); padding: 4px; font-size: 12.5px;
+  }
+  .msel.open .msel-panel { display: block; }
+  .msel-item, .msel-dev {
+    display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 5px;
+    cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .msel-item:hover, .msel-dev:hover { background: #f1f5f9; }
+  .msel-item.sel, .msel-dev.sel { color: var(--primary); font-weight: 600; }
+  .msel-dev { font-weight: 600; }
+  .msel-dev .msel-arrow { transition: transform 0.15s; }
+  .msel-dev.open .msel-arrow { transform: rotate(90deg); }
+  .msel-dev .cnt { margin-left: auto; color: var(--dim); font-weight: 400; font-size: 11px; }
+  .msel-models { padding-left: 16px; }
+  .msel-item .cnt { margin-left: auto; color: var(--dim); font-size: 11px; }
+  .msel-empty { padding: 10px; color: var(--dim); text-align: center; }
+
+  /* Range Bar */
+  .rangebar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 24px; }
+  .range-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .rangebar .custom { display: flex; align-items: center; gap: 6px; color: var(--dim); font-size: 12px; }
+  .rangebar .dp-input {
+    border: 1px solid var(--border); border-radius: 8px; padding: 5px 10px; width: 102px;
+    font-size: 12px; color: var(--text); font-family: inherit; background: #fff;
+    cursor: pointer; text-align: center; transition: border-color 0.15s;
+  }
+  .rangebar .dp-input:hover { border-color: var(--primary); }
+  .rangebar .dp-input::placeholder { color: #94a3b8; }
+  .rangebar #dApply {
+    border: none; background: var(--primary); color: #fff; border-radius: 7px;
+    padding: 5px 12px; font-size: 12px; font-weight: 500; cursor: pointer; font-family: inherit;
+    transition: background 0.15s;
+  }
+  .rangebar #dApply:hover { background: #1d4ed8; }
+  .rangebar #rangeLabel { color: var(--dim); font-size: 12px; font-weight: 500; }
+
+  /* Hero KPI Cards */
+  .hero-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 16px; }
+  @media (max-width: 900px) { .hero-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 520px) { .hero-grid { grid-template-columns: 1fr; } }
+  .hero-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 18px 20px; box-shadow: var(--shadow-card); display: flex; flex-direction: column; justify-content: space-between;
+  }
+  .hero-title { font-size: 12px; font-weight: 500; color: var(--dim); margin-bottom: 8px; }
+  .hero-val { font-size: 26px; font-weight: 700; color: var(--text); letter-spacing: -0.02em; line-height: 1.15; }
+  .hero-val small { font-size: 13px; font-weight: 500; color: var(--dim); margin-left: 2px; }
+  .hero-sub { font-size: 12px; color: var(--dim); margin-top: 8px; line-height: 1.4; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+  .pill-saved {
+    background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; border-radius: 6px;
+    padding: 1.5px 6px; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; gap: 3px;
+  }
+  .dot-input { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--c-input); }
+  .dot-output { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--c-output); }
+
+  /* Heatmap */
+  .heat-scroll { overflow-x: auto; padding-bottom: 4px; }
+  .heat { display: flex; gap: 3px; width: 100%; min-width: 680px; }
+  #heatmap, #bars { user-select: none; -webkit-user-select: none; }
+  .heat .wk { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .heat .d { width: 100%; aspect-ratio: 1 / 1; border-radius: 3px; background: #eaedf1; cursor: pointer; transition: transform 0.1s; }
+  .heat .d:hover { transform: scale(1.2); z-index: 2; }
+  .heat-legend { display: flex; align-items: center; gap: 4px; color: var(--dim); font-size: 11.5px; margin-top: 10px; justify-content: flex-end; }
+  .heat-legend .d { width: 10px; height: 10px; border-radius: 2.5px; display: inline-block; }
+  .month-labels { display: flex; color: var(--dim); font-size: 11px; margin-bottom: 6px; width: 100%; min-width: 680px; }
+  .month-labels span { flex: 1; white-space: nowrap; overflow: visible; min-width: 0; }
+
+  /* Daily Chart */
   svg text { font-family: inherit; }
-  .axis { fill: var(--dim); font-size: 10.5px; }
-  .grid-line { stroke: #eeeef1; stroke-width: 1; }
+  .axis { fill: var(--faint); font-size: 10.5px; font-weight: 500; }
+  .grid-line { stroke: #f1f3f7; stroke-width: 1; }
   .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; }
   .legend .it { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--dim); }
-  .legend .sw { width: 10px; height: 10px; border-radius: 3px; }
+  .legend .sw { width: 9px; height: 9px; border-radius: 2.5px; }
+  .bar { transition: opacity 0.15s; cursor: pointer; }
+  .bar:hover { opacity: 0.85; }
 
-  /* model list */
+  /* Two Column Row */
+  .grid-2 { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 16px; }
+  @media (max-width: 860px) { .grid-2 { grid-template-columns: 1fr; } }
 
-  /* tables */
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th { text-align: right; color: var(--dim); font-weight: 500; font-size: 12px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  /* Tables */
+  .table-scroll { overflow-x: auto; }
+  .table-scroll table { min-width: 640px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: right; color: var(--dim); font-weight: 500; font-size: 11.5px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
   th:first-child, td:first-child { text-align: left; }
-  #priceTable th:last-child, #priceTable td:last-child { text-align: left; }
-  #priceTable { table-layout: fixed; }
-  #priceTable th:nth-child(1) { width: 17%; }
-  #priceTable th:nth-child(2), #priceTable th:nth-child(3), #priceTable th:nth-child(4) { width: 14%; }
-  #priceTable td:last-child { font-size: 12px; color: var(--dim); }
-  td { padding: 10px; border-bottom: 1px solid var(--divider); text-align: right; font-variant-numeric: tabular-nums; }
+  #sessionTable th:nth-child(2), #sessionTable td:nth-child(2),
+  #sessionTable th:nth-child(3), #sessionTable td:nth-child(3) { text-align: left; }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--divider); text-align: right; }
   tr:last-child td { border-bottom: none; }
-  tbody tr:hover { background: #f8f8fa; }
-  .dim { color: var(--dim); }
-
-  footer { color: var(--dim); font-size: 12px; line-height: 1.9; margin-top: 10px; }
-  footer code { background: #ececef; padding: 1px 6px; border-radius: 5px; font-size: 11px; }
-
-  #tooltip {
-    position: fixed; pointer-events: none; z-index: 10;
-    background: #fff; border: 1px solid var(--border); border-radius: 9px;
-    padding: 9px 12px; font-size: 12px; line-height: 1.7; color: var(--text);
-    box-shadow: 0 8px 24px rgba(20,20,40,.12); display: none; white-space: nowrap;
+  tbody tr { transition: background 0.12s ease; }
+  tbody tr:hover { background: #f8fafc; }
+  .td-progress { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+  .progress-bg { width: 60px; height: 5px; background: #eef2f6; border-radius: 3px; overflow: hidden; }
+  .progress-bar { height: 100%; background: var(--primary); border-radius: 3px; }
+  tr.ag-row, tr.pj-row { cursor: pointer; }
+  tr.ag-row.on, tr.pj-row.on { background: var(--primary-light); }
+  tr.dev-row td {
+    background: #f1f5f9; color: var(--dim); font-size: 11px; letter-spacing: .04em;
+    padding: 5px 12px; border-bottom: 1px solid #e2e8f0;
   }
-  #tooltip .t { font-weight: 700; margin-bottom: 2px; }
-  #tooltip .sw { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
+  tr.dev-row td b { color: var(--text); font-size: 12px; margin-right: 10px; }
+  tr.dev-row td span { float: right; font-weight: 600; }
+  .est-cost { border-bottom: 1px dashed var(--dim); cursor: help; }
+  .hero-delta { font-size: 12px; color: var(--dim); font-weight: 600; margin-left: 8px; }
+  .warn-bar {
+    background: #fffbeb; border: 1px solid #fde68a; color: #92400e; border-radius: 10px;
+    padding: 8px 14px; font-size: 12px; margin-bottom: 16px; line-height: 1.6;
+  }
+  .unpriced { color: var(--dim); font-size: 11px; }
+
+  /* 用量分布 donuts */
+  .donut-row { display: flex; gap: 20px; flex-wrap: wrap; padding: 6px 20px 16px; }
+  .donut { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 230px; }
+  .donut ul { list-style: none; margin: 0; padding: 0; font-size: 12px; flex: 1; min-width: 0; }
+  .donut li { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
+  .dn-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; flex-shrink: 0; }
+  .dn-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dn-val { color: var(--dim); white-space: nowrap; }
+
+  /* 分时活跃（星期 × 小时） */
+  .wkheat-wrap { margin: 14px 20px 0; padding-top: 12px; border-top: 1px solid var(--border); }
+  .wk-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+  .wk-title .hint-inline { font-weight: 400; color: var(--dim); font-size: 11px; margin-left: 8px; }
+  .wk-grid { display: grid; grid-template-columns: 30px repeat(24, 1fr); gap: 2px; align-items: center; }
+  .wk-cell { height: 12px; border-radius: 2px; background: #ebedf0; }
+  .wk-lab { font-size: 10px; color: var(--dim); }
+  .wk-hour { font-size: 9px; color: var(--dim); text-align: center; }
+
+  /* Agent tag chip */
+  .agent-tag {
+    display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600;
+    padding: 1.5px 8px; border-radius: 999px; border: 1px solid var(--border);
+    color: var(--text-secondary); background: #fff; white-space: nowrap;
+  }
+  .agent-tag .cdot { width: 7px; height: 7px; border-radius: 50%; }
+
+  /* Session Explorer */
+  .sess-ctrls { display: flex; align-items: center; gap: 10px; }
+  .sess-search {
+    border: 1px solid var(--border); border-radius: 7px; padding: 4px 10px; font-size: 12px;
+    font-family: inherit; width: 160px; background: #fff; outline: none; transition: border-color 0.15s;
+  }
+  .sess-search:focus { border-color: var(--primary); }
+  .sess-sort {
+    font-size: 12px; color: var(--text); background: #fff; font-family: inherit;
+    border: 1px solid var(--border); border-radius: 7px; padding: 4px 8px; cursor: pointer; outline: none;
+  }
+  .sess-id {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 11.5px; color: var(--text-secondary); background: #f1f5f9; padding: 2px 5px; border-radius: 4px;
+  }
+  .sess-proj { display: block; font-size: 10.5px; color: var(--faint); margin-top: 2px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .btn-copy {
+    border: 1px solid var(--border); background: #fff; color: var(--dim); border-radius: 5px;
+    padding: 1.5px 6px; font-size: 10.5px; font-weight: 500; cursor: pointer; font-family: inherit; margin-left: 4px;
+    transition: all 0.15s;
+  }
+  .btn-copy:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+  .model-tag {
+    display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 4px;
+    background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; margin-right: 3px; font-weight: 500;
+  }
+  .mini-bar {
+    display: flex; height: 5px; width: 54px; border-radius: 2.5px; overflow: hidden; background: #f1f5f9; margin-left: auto;
+  }
+  .mini-bar span { height: 100%; }
+  .expand-row { text-align: center; padding: 12px 0 4px; }
+  .btn-expand {
+    border: none; background: transparent; color: var(--primary); font-size: 12px; font-weight: 600;
+    cursor: pointer; font-family: inherit; padding: 4px 10px; border-radius: 6px;
+  }
+  .btn-expand:hover { background: var(--primary-light); }
+  .ev-tag { font-size: 11px; color: var(--dim); background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 5px; padding: 1px 6px; white-space: nowrap; }
+
+  /* Collapsible Sources Card */
+  details.price-details {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 14px 20px; margin-bottom: 16px; box-shadow: var(--shadow-card);
+  }
+  details.price-details summary {
+    font-size: 13px; font-weight: 650; color: var(--dim); cursor: pointer; user-select: none;
+    display: flex; align-items: center; justify-content: space-between; outline: none;
+  }
+  details.price-details summary:hover { color: var(--text); }
+  details.price-details[open] summary { margin-bottom: 14px; color: var(--text); }
+  .price-badge { font-size: 11px; font-weight: 500; color: var(--faint); }
+  .src-path { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--dim); }
+  .yn { font-size: 11px; font-weight: 600; }
+  .yn.y { color: #059669; }
+  .yn.n { color: #cbd5e1; }
+
+  /* Date Picker Popup */
+  .dp-pop {
+    position: fixed; z-index: 30; width: 264px; padding: 14px 16px 12px;
+    background: #fff; border: 1px solid var(--border); border-radius: 14px;
+    box-shadow: var(--shadow-pop); user-select: none;
+  }
+  .dp-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .dp-head .t { font-weight: 650; font-size: 13.5px; }
+  .dp-head button {
+    border: none; background: transparent; cursor: pointer; font-size: 15px; line-height: 1;
+    color: var(--dim); padding: 4px 8px; border-radius: 6px; font-family: inherit;
+  }
+  .dp-head button:hover { background: #f1f3f7; color: var(--text); }
+  .dp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; }
+  .dp-grid .wd { color: var(--dim); font-size: 11px; padding: 3px 0; }
+  .dp-grid .day { font-size: 12px; padding: 5px 0; border-radius: 7px; cursor: pointer; }
+  .dp-grid .day:hover { background: #f1f3f7; }
+  .dp-grid .day.tod { color: var(--primary); font-weight: 700; }
+  .dp-grid .day.sel { background: var(--primary); color: #fff; font-weight: 650; }
+  .dp-grid .day.sel:hover { background: var(--primary); }
+  .dp-grid .day.dis { color: #d4d4d8; cursor: default; }
+  .dp-grid .day.dis:hover { background: none; }
+  .dp-foot { display: flex; justify-content: space-between; margin-top: 8px; }
+  .dp-foot button {
+    border: none; background: transparent; cursor: pointer; font-size: 12px;
+    color: var(--primary); padding: 3px 6px; border-radius: 6px; font-family: inherit;
+  }
+  .dp-foot button:hover { background: var(--primary-light); }
+
+  /* Tooltip & Toast */
+  #tooltip {
+    position: fixed; pointer-events: none; z-index: 40;
+    background: #fff; border: 1px solid var(--border); border-radius: 10px;
+    padding: 9px 12px; font-size: 12px; line-height: 1.6; color: var(--text);
+    box-shadow: var(--shadow-pop); display: none; white-space: nowrap;
+  }
+  #tooltip .t { font-weight: 700; margin-bottom: 3px; }
+  #tooltip .sw { display: inline-block; width: 7px; height: 7px; border-radius: 2px; margin-right: 5px; }
+
+  #toast {
+    position: fixed; bottom: 24px; right: 24px; z-index: 50; display: flex; flex-direction: column; gap: 8px;
+    pointer-events: none;
+  }
+  .toast-msg {
+    background: #1e293b; color: #f8fafc; font-size: 12.5px; font-weight: 500;
+    padding: 9px 15px; border-radius: 8px; box-shadow: 0 10px 20px rgba(0,0,0,0.12);
+    opacity: 0; transform: translateY(8px); transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    pointer-events: auto; display: flex; align-items: center; gap: 6px;
+  }
+  .toast-msg.show { opacity: 1; transform: translateY(0); }
+  .toast-msg.error { background: #b91c1c; }
+
+  footer { color: var(--dim); font-size: 11.5px; line-height: 1.8; margin-top: 16px; padding: 0 4px; }
+  footer code { background: #eef0f3; padding: 1px 5px; border-radius: 4px; font-size: 11px; }
 </style>
 </head>
 <body>
 <div class="wrap">
 
+  <!-- Header -->
   <header>
     <div>
-      <h1 data-i18n="usage">用量</h1>
-      <div class="sub" data-i18n="sub">Kimi Code token 用量与活跃度统计 · 数据源为本机会话日志</div>
+      <div class="brand">
+        <h1 data-i18n="usage">用量</h1>
+        <span class="badge-tag" data-i18n="badgeLocal">Local</span>
+      </div>
+      <div class="sub" data-i18n="sub">本机全部 Agent 的 token 用量与成本分析 · 数据源为各工具本地日志</div>
     </div>
     <div class="head-side">
-      <button id="langBtn">EN</button>
+      <div class="head-actions">
+        <button id="langBtn" class="btn-subtle">EN</button>
+        <button id="refreshBtn" class="btn-subtle" data-i18n="refresh">刷新数据</button>
+      </div>
       <div class="meta">
-        <span data-i18n="updatedAt">更新于</span> <span id="gen"></span> <button id="refreshBtn" data-i18n="refresh">刷新数据</button><br>
-        <span data-i18n="startCmd">启动服务：</span><code>./start.sh</code>
+        <span data-i18n="updatedAt">更新于</span> <span id="gen"></span> · <code>127.0.0.1:8931</code>
       </div>
     </div>
   </header>
 
-  <div class="card rangebar">
-    <div class="tabs" id="presetTabs">
-      <button data-p="today" data-i18n="pToday">今日</button>
-      <button data-p="7" data-i18n="p7" class="on">近 7 日</button>
-      <button data-p="14" data-i18n="p14">近 14 日</button>
-      <button data-p="30" data-i18n="p30">近 30 日</button>
-      <button data-p="all" data-i18n="pAll">全部</button>
+  <!-- Filter Bar -->
+  <div class="card agentbar">
+    <span class="ab-label" id="agentBarLabel"></span>
+    <select id="agentSel" class="agent-sel" aria-label="Agent"></select>
+    <span class="ab-label" id="modelBarLabel"></span>
+    <div class="msel" id="modelSel">
+      <button type="button" id="modelSelBtn" class="agent-sel msel-btn" aria-haspopup="listbox" aria-expanded="false"><span id="modelSelTxt"></span><span class="msel-arrow">▾</span></button>
+      <div class="msel-panel" id="modelSelPanel" role="listbox"></div>
     </div>
-    <div class="custom">
-      <input type="text" id="dStart" class="dp-input" readonly data-i18n-ph="phStart" placeholder="开始日期"> <span data-i18n="toSep">至</span> <input type="text" id="dEnd" class="dp-input" readonly data-i18n-ph="phEnd" placeholder="结束日期">
-      <button id="dApply" data-i18n="apply">查询</button>
+    <span class="ab-label" id="projBarLabel"></span>
+    <select id="projSel" class="agent-sel" aria-label="Project"></select>
+  </div>
+  <div id="warnBar"></div>
+
+  <!-- Filter Bar -->
+  <div class="card rangebar">
+    <div class="range-left">
+      <div class="tabs" id="presetTabs">
+        <button data-p="today" data-i18n="pToday" aria-pressed="false">今日</button>
+        <button data-p="7" data-i18n="p7" class="on" aria-pressed="true">近 7 日</button>
+        <button data-p="14" data-i18n="p14" aria-pressed="false">近 14 日</button>
+        <button data-p="30" data-i18n="p30" aria-pressed="false">近 30 日</button>
+        <button data-p="all" data-i18n="pAll" aria-pressed="false">全部</button>
+      </div>
+      <div class="custom">
+        <input type="text" id="dStart" class="dp-input" readonly data-i18n-ph="phStart" placeholder="开始日期" aria-label="Start date">
+        <span data-i18n="toSep">至</span>
+        <input type="text" id="dEnd" class="dp-input" readonly data-i18n-ph="phEnd" placeholder="结束日期" aria-label="End date">
+        <button id="dApply" data-i18n="apply">查询</button>
+      </div>
     </div>
     <span id="rangeLabel"></span>
   </div>
 
-  <div class="card" style="padding:0 26px">
-    <div class="strip" id="strip"></div>
+  <!-- Hero KPI Cards -->
+  <div class="hero-grid" id="heroGrid">
+    <div class="hero-card">
+      <div class="hero-title" id="kpiTotalTitle" data-i18n="kpiTotal">范围内总用量</div>
+      <div class="hero-val" id="kpiTotalVal">—</div>
+      <div class="hero-sub" id="kpiTotalSub">—</div>
+    </div>
+    <div class="hero-card">
+      <div class="hero-title" data-i18n="kpiNet">净生成贡献 (Input+Output)</div>
+      <div class="hero-val" id="kpiNetVal">—</div>
+      <div class="hero-sub" id="kpiNetSub">—</div>
+    </div>
+    <div class="hero-card">
+      <div class="hero-title" data-i18n="kpiCache">Cache 命中率 & 节省</div>
+      <div class="hero-val" id="kpiCacheVal">—</div>
+      <div class="hero-sub" id="kpiCacheSub">—</div>
+    </div>
+    <div class="hero-card">
+      <div class="hero-title" data-i18n="kpiCost">API 估算成本</div>
+      <div class="hero-val" id="kpiCostVal">—</div>
+      <div class="hero-sub" id="kpiCostSub">—</div>
+    </div>
   </div>
 
+  <!-- Activity Heatmap -->
   <div class="card">
     <div class="card-head">
-      <h2 id="heatTitle">Token 活跃度</h2>
+      <h2 id="heatTitle" data-i18n="heatTitleT">Token 活跃度</h2>
       <div class="head-right">
-        <div class="tabs" id="heatMetricTabs">
-          <button data-m="tokens" data-i18n="metricToken" class="on">Token</button>
-          <button data-m="cost" data-i18n="metricCost">费用</button>
+        <div class="tabs" id="heatMetricTabs" role="group">
+          <button data-m="tokens" data-i18n="metricToken" class="on" aria-pressed="true">Token</button>
+          <button data-m="cost" data-i18n="metricCost" aria-pressed="false">费用</button>
         </div>
         <span class="range" id="heatRange"></span>
       </div>
     </div>
     <div class="heat-scroll"><div id="heatmap"></div></div>
     <div class="heat-legend"><span data-i18n="less">少</span> <span id="legendSw"></span> <span data-i18n="more">多</span></div>
+    <div class="wkheat-wrap" id="wkheatWrap">
+      <div class="wk-title"><span data-i18n="wkTitle">分时活跃</span><span class="hint-inline" data-i18n="wkHint">星期 × 小时 · 仅含小时粒度来源</span></div>
+      <div class="wk-grid" id="wkheat"></div>
+    </div>
   </div>
 
-  <div class="row3">
-    <div class="card"><h2 data-i18n="cardActivity">活跃度指标</h2><div class="kv" id="kvActivity"></div></div>
-    <div class="card"><h2 data-i18n="cardToken">Token 指标</h2><div class="kv" id="kvToken"></div></div>
-    <div class="card"><h2 data-i18n="cardCache">Cache 指标</h2><div class="kv" id="kvCache"></div></div>
-  </div>
-
+  <!-- Daily Breakdown Chart -->
   <div class="card">
     <div class="card-head">
-      <h2 data-i18n="dailyTitle">每日 Token 构成</h2>
+      <div>
+        <h2 data-i18n="dailyTitle">每日用量趋势</h2>
+        <div class="hint" id="dailyHint" data-i18n="dailyHint">支持切换全量吞吐、净生成量与实际费用视角</div>
+      </div>
       <div class="head-right">
-        <select id="barModelSel" class="bar-model-sel"></select>
+        <div class="tabs" id="barModeTabs" role="group">
+          <button data-bm="total" data-i18n="modeTotal" class="on" aria-pressed="true">全量</button>
+          <button data-bm="net" data-i18n="modeNet" aria-pressed="false">净生成</button>
+          <button data-bm="cost" data-i18n="modeCost" aria-pressed="false">费用 ($)</button>
+        </div>
         <span class="range" id="barRange"></span>
       </div>
     </div>
@@ -248,80 +478,284 @@
     <div class="legend" id="barLegend"></div>
   </div>
 
+  <!-- Distribution Donuts -->
   <div class="card">
-    <h2 data-i18n="modelUsage">模型用量</h2>
-    <div class="hint" data-i18n="modelHint">按总 token 排序（含缓存读取）· 跟随上方时间范围</div>
-    <table id="modelTable">
-      <thead><tr><th data-i18n="thModel">模型</th><th data-i18n="thInput">输入</th><th data-i18n="thOutput">输出</th><th data-i18n="thCacheRead">缓存读取</th><th data-i18n="thTotal">总计</th><th data-i18n="thCost">估算成本</th></tr></thead>
-      <tbody></tbody>
-    </table>
+    <div class="card-head">
+      <div>
+        <h2 data-i18n="distTitle">用量分布</h2>
+        <div class="hint" data-i18n="distHint">范围内各维度 token 占比 · 前 5 项</div>
+      </div>
+    </div>
+    <div class="donut-row" id="donutRow"></div>
   </div>
 
+  <!-- Agent Usage Table -->
   <div class="card">
-    <h2 data-i18n="monthlyTitle">按月汇总</h2>
-    <div class="hint" data-i18n="monthlyHint">估值成本按官方 API 定价计算（¥/1M tokens）· 固定为全时间段</div>
-    <table id="monthTable">
-      <thead><tr><th data-i18n="thMonth">月份</th><th data-i18n="thInput">输入</th><th data-i18n="thOutput">输出</th><th data-i18n="thCacheRead">缓存读取</th><th data-i18n="thTotal">总计</th><th data-i18n="thCost2">估值成本</th></tr></thead>
+    <div class="card-head">
+      <div>
+        <h2 data-i18n="agentUsage">Agent 用量</h2>
+        <div class="hint" data-i18n="agentHint">各 Agent 在范围内的用量汇总 · 点击行可快速筛选</div>
+      </div>
+      <span class="range" id="agentRange"></span>
+    </div>
+    <div class="table-scroll"><table id="agentTable">
+      <thead>
+        <tr>
+          <th data-i18n="thAgent">Agent</th>
+          <th data-i18n="thShare" style="width:75px;">占比</th>
+          <th data-i18n="thDays">天数</th>
+          <th data-i18n="thSessions">会话</th>
+          <th data-i18n="thInput">输入</th>
+          <th data-i18n="thOutput">输出</th>
+          <th data-i18n="thCacheRead">缓存读取</th>
+          <th data-i18n="thTotal">总计</th>
+          <th data-i18n="thEvents">活动</th>
+          <th data-i18n="thCost">估算成本</th>
+        </tr>
+      </thead>
       <tbody></tbody>
-    </table>
+    </table></div>
   </div>
 
-  <div class="card">
-    <h2 data-i18n="priceTitle">API 定价参考</h2>
-    <div class="hint" data-i18n="priceHint">Kimi 开放平台官方价（¥ / 1M tokens）· 估算成本按此表计算</div>
-    <table id="priceTable">
-      <thead><tr><th data-i18n="thModel">模型</th><th data-i18n="thInput">输入</th><th data-i18n="thCacheHit">缓存命中</th><th data-i18n="thOutput">输出</th><th data-i18n="thNote">备注</th></tr></thead>
-      <tbody></tbody>
-    </table>
+  <!-- 2-Column: Model Breakdown & Monthly Summary -->
+  <div class="grid-2">
+    <!-- Model Usage -->
+    <div class="card">
+      <h2 data-i18n="modelUsage">模型用量</h2>
+      <div class="hint" data-i18n="modelHint">按总 token 排序 · 跟随上方时间范围</div>
+      <div class="table-scroll"><table id="modelTable" style="margin-top:12px;">
+        <thead>
+          <tr>
+            <th data-i18n="thModel">模型</th>
+            <th data-i18n="thAgent">Agent</th>
+            <th data-i18n="thShare" style="width:75px;">占比</th>
+            <th data-i18n="thInput">输入</th>
+            <th data-i18n="thOutput">输出</th>
+            <th data-i18n="thCacheRead">缓存读取</th>
+            <th data-i18n="thTotal">总计</th>
+            <th data-i18n="thCost">估算成本</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table></div>
+    </div>
+
+    <!-- Monthly Summary -->
+    <div class="card">
+      <h2 data-i18n="monthlyTitle">按月汇总</h2>
+      <div class="hint" id="monthlyHint" data-i18n="monthlyHint">按来源数据估算 · 固定全时间段</div>
+      <div class="table-scroll"><table id="monthTable" style="margin-top:12px;">
+        <thead>
+          <tr>
+            <th data-i18n="thMonth">月份</th>
+            <th data-i18n="thInput">输入</th>
+            <th data-i18n="thOutput">输出</th>
+            <th data-i18n="thCacheRead">缓存读取</th>
+            <th data-i18n="thTotal">总计</th>
+            <th data-i18n="thCost2">估算成本</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table></div>
+    </div>
   </div>
+
+  <!-- Project Distribution -->
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <h2 data-i18n="projTitle">项目分布</h2>
+        <div class="hint" data-i18n="projHint">按总 token 排序 · 点击行可筛选项目</div>
+      </div>
+    </div>
+    <div class="table-scroll"><table id="projTable" style="margin-top:12px;">
+      <thead>
+        <tr>
+          <th data-i18n="thProject" style="text-align:left;">项目</th>
+          <th data-i18n="thAgent">Agent</th>
+          <th data-i18n="thShare" style="width:75px;">占比</th>
+          <th data-i18n="thDays">天数</th>
+          <th data-i18n="thSessions">会话</th>
+          <th data-i18n="thTotal">总计</th>
+          <th data-i18n="thEvents">活动</th>
+          <th data-i18n="thCost">估算成本</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table></div>
+  </div>
+
+  <!-- Session Explorer -->
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <h2 data-i18n="sessionTitle">会话明细 (Session Explorer)</h2>
+        <div class="hint" data-i18n="sessionHint">按消耗排序的高用量会话 · 点击 ID 即可复制</div>
+      </div>
+      <div class="head-right sess-ctrls">
+        <input type="text" id="sessSearch" class="sess-search" data-i18n-ph="sessionSearchPh" placeholder="搜索 Session ID..." aria-label="Search sessions">
+        <select id="sessSort" class="sess-sort" aria-label="Sort sessions">
+          <option value="total" data-i18n="sortTotal">按总 Token 排序</option>
+          <option value="cost" data-i18n="sortCost">按估算成本排序</option>
+          <option value="net" data-i18n="sortNet">按净生成量排序</option>
+        </select>
+      </div>
+    </div>
+    <div class="table-scroll"><table id="sessionTable">
+      <thead>
+        <tr>
+          <th data-i18n="thSessionId">会话 ID</th>
+          <th data-i18n="thAgent">Agent</th>
+          <th data-i18n="thModels" style="text-align:left;">模型</th>
+          <th data-i18n="thBreakdown" style="width:68px;">构成</th>
+          <th data-i18n="thNet">净生成</th>
+          <th data-i18n="thCacheRead">缓存读取</th>
+          <th data-i18n="thTotal">总计</th>
+          <th data-i18n="thCost">估算成本</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table></div>
+    <div class="expand-row" id="sessionExpandRow">
+      <button class="btn-expand" id="sessExpandBtn" data-i18n="showMore">展开更多</button>
+    </div>
+  </div>
+
+  <!-- Hourly Detail Records -->
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <h2 data-i18n="recTitle">详细记录</h2>
+        <div class="hint" data-i18n="recHint">小时粒度用量 · 仅含原生解析来源（ccusage 来源仅日粒度）</div>
+      </div>
+    </div>
+    <div class="table-scroll"><table id="recTable" style="margin-top:12px;">
+      <thead>
+        <tr>
+          <th data-i18n="thTime" style="text-align:left;">时间</th>
+          <th data-i18n="thAgent">Agent</th>
+          <th data-i18n="thModel" style="text-align:left;">模型</th>
+          <th data-i18n="thProject" style="text-align:left;">项目</th>
+          <th data-i18n="thInput">输入</th>
+          <th data-i18n="thOutput">输出</th>
+          <th data-i18n="thCacheRead">缓存读取</th>
+          <th data-i18n="thTotal">总计</th>
+          <th data-i18n="thEvents">活动</th>
+          <th data-i18n="thCost">估算成本</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table></div>
+    <div class="expand-row" id="recExpandRow">
+      <button class="btn-expand" id="recExpandBtn" data-i18n="showMore">展开更多</button>
+    </div>
+  </div>
+
+  <!-- Collapsible Data Sources -->
+  <details class="price-details" id="srcDetails">
+    <summary>
+      <span data-i18n="srcTitle">数据来源与覆盖说明</span>
+      <span class="price-badge" data-i18n="srcBadge">各 Agent 本地日志 ▾</span>
+    </summary>
+    <div class="table-scroll"><table id="srcTable">
+      <thead>
+        <tr>
+          <th data-i18n="thAgent">Agent</th>
+          <th data-i18n="thSource" style="text-align:left;">数据来源</th>
+          <th data-i18n="thHasTokens">Token</th>
+          <th data-i18n="thHasCost">成本</th>
+          <th data-i18n="thNote2" style="text-align:left;">说明</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table></div>
+  </details>
 
   <footer>
-    <span data-i18n="footer1">数据来源：本机 <code>~/.kimi-code/sessions/**/wire.jsonl</code> 中服务器返回的真实 token 计数，经 ccusage 聚合，未上传任何数据。</span><br>
-    <span data-i18n="footer2">若你是会员订阅用户，「估算成本」为「若按 API 按量计费」的等值参考，并非实际扣费。</span>
+    <span data-i18n="footer1">数据来源：各 Agent 本机日志 / 数据库（详见上方「数据来源」），仅本地处理，未上传任何数据。</span><br>
+    <span data-i18n="footer2">「估算成本」为各来源按目录价折算的等值参考（USD），并非实际扣费；部分工具本地不记录 token，仅展示活动量。</span>
   </footer>
 </div>
 
 <div id="tooltip"></div>
+<div id="toast"></div>
 
 <script src="data.js"></script>
 <script>
 (function () {
   'use strict';
 
-  // ---------- 中英文切换（默认中文，选择记入 localStorage） ----------
+  // ---------- i18n Dictionary ----------
   const I18N = {
     zh: {
-      usage: '用量', pageTitle: 'Kimi Code 用量',
-      sub: 'Kimi Code token 用量与活跃度统计 · 数据源为本机会话日志',
-      updatedAt: '更新于', refresh: '刷新数据', refreshing: '刷新中…', startCmd: '启动服务：',
+      usage: '用量', pageTitle: 'Agent 用量', badgeLocal: 'Local',
+      sub: '本机全部 Agent 的 token 用量与成本分析 · 数据源为各工具本地日志',
+      updatedAt: '更新于', refresh: '刷新数据', refreshing: '刷新中…',
+      agentFilter: 'Agent：', allAgents: '全部 Agent',
+      modelFilter: '模型：', projFilter: '项目：', allProjects: '全部项目',
       pToday: '今日', p7: '近 7 日', p14: '近 14 日', p30: '近 30 日', pAll: '全部',
       toSep: '至', apply: '查询', phStart: '开始日期', phEnd: '结束日期',
-      heatTitleT: 'Token 活跃度', heatTitleC: '费用活跃度', metricToken: 'Token', metricCost: '费用',
+
+      kpiTotal: '范围内总用量', kpiEvents: '范围内活动量',
+      kpiNet: '净生成贡献 (Input+Output)',
+      kpiCache: 'Cache 命中率 & 节省',
+      kpiCost: 'API 估值成本',
+      kpiActiveDays: '活跃天数',
+      kpiAvgDaily: '日均',
+      kpiDaysUnit: '天',
+      kpiSessions: '会话',
+      kpiInputDot: '输入',
+      kpiOutputDot: '输出',
+      kpiSavedPill: '通过缓存为你节省 ≈',
+      kpiStreakCur: '当前连续',
+      kpiStreakMax: '最长',
+      kpiNoToken: '本地无 token 记录',
+      kpiEventsUnit: '条消息/事件',
+
+      heatTitleT: 'Token 活跃度', heatTitleC: '费用活跃度', heatTitleE: '活跃度',
+      metricToken: 'Token', metricCost: '费用',
       less: '少', more: '多',
-      cardActivity: '活跃度指标', cardToken: 'Token 指标', cardCache: 'Cache 指标',
-      dailyTitle: '每日 Token 构成', allModels: '全部模型',
-      modelUsage: '模型用量', modelHint: '按总 token 排序（含缓存读取）· 跟随上方时间范围',
-      monthlyTitle: '按月汇总', monthlyHint: '估值成本按官方 API 定价计算（¥/1M tokens）· 固定为全时间段',
-      priceTitle: 'API 定价参考', priceHint: 'Kimi 开放平台官方价（¥ / 1M tokens）· 估算成本按此表计算',
-      thModel: '模型', thInput: '输入', thOutput: '输出', thCacheRead: '缓存读取', thTotal: '总计',
-      thCost: '估算成本', thMonth: '月份', thCost2: '估值成本', thCacheHit: '缓存命中', thNote: '备注',
-      footer1: '数据来源：本机 <code>~/.kimi-code/sessions/**/wire.jsonl</code> 中服务器返回的真实 token 计数，经 ccusage 聚合，未上传任何数据。',
-      footer2: '若你是会员订阅用户，「估算成本」为「若按 API 按量计费」的等值参考，并非实际扣费。',
-      rangeLabel: '统计范围：',
-      totalTokens: '累计 tokens', peakDay: '单日峰值', avgSession: '平均每会话',
-      curStreak: '当前连续', bestStreak: '最长连续', rangeTokens: '范围内 tokens',
-      avgDaily: '平均每日（活跃日）', activeDaysRange: '活跃天数 / 范围', bestStreakRange: '范围内最长连续',
-      daysUnit: '天',
-      totalSessions: '总会话数', activeDays: '活跃天数', bestDay: '最佳单日', spanDays: '范围天数',
-      inputTokens: '输入 tokens', outputTokens: '输出 tokens', cacheRead: '缓存读取', cacheWrite: '缓存写入',
-      estCost: '估算成本（API 价）', avgDailyCost: '日均成本',
-      cacheTokens: '缓存 tokens', hitRate: 'Cache 命中率', todayTokens: '今日 tokens', weekTokens: '本周 tokens',
-      avgDailyCache: '平均每日缓存', cacheShare: '缓存占比',
-      nInput: '新输入', nOutput: '输出', nCacheRead: '缓存读取',
+
+      dailyTitle: '每日用量趋势', dailyHint: '支持切换全量吞吐、净生成量与实际费用视角',
+      dailyHintE: '该 Agent 本地不记录 token，展示每日活动量', allModels: '全部模型', devAll: '全部',
+      modeTotal: '全量', modeNet: '净生成', modeCost: '费用 ($)', modeEvents: '活动量',
+
+      agentUsage: 'Agent 用量', agentHint: '各 Agent 在范围内的用量汇总 · 点击行可快速筛选',
+      distTitle: '用量分布', distHint: '范围内各维度 token 占比 · 前 5 项',
+      wkTitle: '分时活跃', wkHint: '星期 × 小时 · 仅含小时粒度来源',
+      recTitle: '详细记录', recHint: '小时粒度用量 · 仅含原生解析来源（ccusage 来源仅日粒度）',
+      thTime: '时间', unpriced: '未定价', distOther: '其他', devOther: '其他',
+      projTitle: '项目分布', projHint: '按总 token 排序 · 点击行可筛选项目', thProject: '项目',
+      thAgent: 'Agent', thSessions: '会话', thDays: '天数', thEvents: '活动',
+      thSource: '数据来源', thHasTokens: 'Token', thHasCost: '成本', thNote2: '说明',
+
+      modelUsage: '模型用量', modelHint: '按总 token 排序 · 包含各模型的 Token 构成与占比',
+      thModel: '模型', thShare: '占比', thInput: '输入', thOutput: '输出', thCacheRead: '缓存读取', thTotal: '总计', thCost: '估算成本',
+
+      monthlyTitle: '按月汇总', monthlyHint: '按来源数据估算 · 固定全时间段',
+      thMonth: '月份', thCost2: '估算成本',
+
+      sessionTitle: '会话明细 (Session Explorer)',
+      sessionHint: '按消耗排序的高用量会话 · 点击 ID 即可复制',
+      sessionSearchPh: '搜索会话 / 模型 / Agent...',
+      sortTotal: '按总 Token 排序', sortCost: '按估算成本排序', sortNet: '按净生成量排序',
+      thSessionId: '会话 ID', thModels: '模型', thBreakdown: '构成', thNet: '净生成',
+      showMore: '展开更多 (共 {n} 条)', showLess: '收起列表',
+      copied: '会话 ID 已复制到剪贴板', copyBtn: '复制',
+      noSessionsFound: '未找到匹配的会话记录',
+      evUnit: '条',
+
+      srcTitle: '数据来源与覆盖说明', srcBadge: '各 Agent 本地日志 ▾',
+      noteTokenOk: '完整 token 与成本', noteTokenOnly: '有 token；成本按 models.dev 价目估算 (≈)', noteEventsOnly: '本地不记录 token，仅活动量',
+      estCostSrc: '按 models.dev 价目估算（该来源无记账成本）',
+
+      footer1: '数据来源：各 Agent 本机日志 / 数据库（详见上方「数据来源」），仅本地处理，未上传任何数据。',
+      footer2: '「估算成本」为各来源按目录价折算的等值参考（USD），并非实际扣费；部分工具本地不记录 token，仅展示活动量。',
+      rangeLabel: '范围：',
+      nInput: '新输入', nOutput: '输出', nCacheRead: '缓存读取', nEvents: '消息/事件',
       noRecord: '无记录', estCostTip: '估算成本', noRangeRecords: '该范围内无记录',
-      noteOfficial: '官方公开价', noteHalf: '无公开价，按官方文档折算半价', noteK27: 'K2.7 Code',
       noDataTitle: '暂无数据',
-      noDataHint: '还没有可统计的 Kimi Code 会话记录。先用 Kimi Code 跑几轮对话，然后点右上角「刷新数据」，或运行 ./refresh.sh。',
+      noDataHint: '还没有可统计的 Agent 使用记录。先用任意支持的 Agent 跑几轮对话，然后点右上角「刷新数据」，或运行 ./refresh.sh。',
       noFileTitle: '还没有数据文件',
       noFileHint: '请先在项目目录运行 <code>npm install</code> 和 <code>./refresh.sh</code> 生成数据，然后刷新本页；或直接运行 <code>./start.sh</code>。',
       refreshFail: '刷新失败：\n', noServer: '无法连接本地服务。请先在项目目录运行：\n./start.sh',
@@ -330,37 +764,74 @@
       locale: 'zh-CN',
     },
     en: {
-      usage: 'Usage', pageTitle: 'Kimi Code Usage',
-      sub: 'Kimi Code token usage & activity stats · data from local session logs',
-      updatedAt: 'Updated', refresh: 'Refresh', refreshing: 'Refreshing…', startCmd: 'Start server:',
+      usage: 'Usage', pageTitle: 'Agent Usage', badgeLocal: 'Local',
+      sub: 'Token usage & cost across all local agents · data from each tool\'s local logs',
+      updatedAt: 'Updated', refresh: 'Refresh', refreshing: 'Refreshing…',
+      agentFilter: 'Agent: ', allAgents: 'All Agents',
+      modelFilter: 'Model: ', projFilter: 'Project: ', allProjects: 'All projects',
       pToday: 'Today', p7: '7D', p14: '14D', p30: '30D', pAll: 'All',
       toSep: 'to', apply: 'Apply', phStart: 'Start date', phEnd: 'End date',
-      heatTitleT: 'Token Activity', heatTitleC: 'Cost Activity', metricToken: 'Token', metricCost: 'Cost',
+
+      kpiTotal: 'Total Tokens in Range', kpiEvents: 'Activity in Range',
+      kpiNet: 'Net Generated (Input+Output)',
+      kpiCache: 'Cache Hit & Savings',
+      kpiCost: 'Est. API Cost',
+      kpiActiveDays: 'Active days',
+      kpiAvgDaily: 'Daily avg',
+      kpiDaysUnit: 'days',
+      kpiSessions: 'sessions',
+      kpiInputDot: 'Input',
+      kpiOutputDot: 'Output',
+      kpiSavedPill: 'Saved by Cache ≈',
+      kpiStreakCur: 'Current streak',
+      kpiStreakMax: 'Best',
+      kpiNoToken: 'No local token data',
+      kpiEventsUnit: 'messages/events',
+
+      heatTitleT: 'Token Activity', heatTitleC: 'Cost Activity', heatTitleE: 'Activity',
+      metricToken: 'Token', metricCost: 'Cost',
       less: 'Less', more: 'More',
-      cardActivity: 'Activity', cardToken: 'Tokens', cardCache: 'Cache',
-      dailyTitle: 'Daily Token Breakdown', allModels: 'All models',
-      modelUsage: 'Usage by Model', modelHint: 'Sorted by total tokens (incl. cache read) · follows the time range above',
-      monthlyTitle: 'Monthly Summary', monthlyHint: 'Estimated cost at official API pricing (¥/1M tokens) · fixed to the full time range',
-      priceTitle: 'API Pricing Reference', priceHint: 'Official Kimi platform prices (¥ / 1M tokens) · cost estimates use this table',
-      thModel: 'Model', thInput: 'Input', thOutput: 'Output', thCacheRead: 'Cache read', thTotal: 'Total',
-      thCost: 'Est. cost', thMonth: 'Month', thCost2: 'Est. cost', thCacheHit: 'Cache hit', thNote: 'Note',
-      footer1: 'Source: real token counts returned by the server, from local <code>~/.kimi-code/sessions/**/wire.jsonl</code>, aggregated by ccusage. Nothing is uploaded.',
-      footer2: 'For subscription users, "Est. cost" is an equivalent reference "as if billed per API usage", not an actual charge.',
+
+      dailyTitle: 'Daily Usage Trend', dailyHint: 'Toggle between Total Throughput, Net Output & Actual Cost',
+      dailyHintE: 'This agent does not log tokens locally; showing daily activity', allModels: 'All models', devAll: 'All',
+      modeTotal: 'Total', modeNet: 'Net Generated', modeCost: 'Cost ($)', modeEvents: 'Activity',
+
+      agentUsage: 'Agent Usage', agentHint: 'Usage per agent in range · click a row to filter',
+      distTitle: 'Distribution', distHint: 'Token share per dimension in range · top 5',
+      wkTitle: 'Activity by Hour', wkHint: 'Weekday × hour · sources with hour granularity only',
+      recTitle: 'Records', recHint: 'Hourly usage · native parsers only (ccusage sources are day-granular)',
+      thTime: 'Time', unpriced: 'Unpriced', distOther: 'Other', devOther: 'Other',
+      projTitle: 'Projects', projHint: 'Sorted by total tokens · click a row to filter', thProject: 'Project',
+      thAgent: 'Agent', thSessions: 'Sessions', thDays: 'Days', thEvents: 'Events',
+      thSource: 'Source', thHasTokens: 'Tokens', thHasCost: 'Cost', thNote2: 'Note',
+
+      modelUsage: 'Model Usage', modelHint: 'Sorted by total tokens · follows the time range above',
+      thModel: 'Model', thShare: 'Share', thInput: 'Input', thOutput: 'Output', thCacheRead: 'Cache read', thTotal: 'Total', thCost: 'Est. cost',
+
+      monthlyTitle: 'Monthly Summary', monthlyHint: 'Estimated from source data · fixed full range',
+      thMonth: 'Month', thCost2: 'Est. cost',
+
+      sessionTitle: 'Session Explorer',
+      sessionHint: 'Detailed session logs · Click ID to copy',
+      sessionSearchPh: 'Search session / model / agent...',
+      sortTotal: 'Sort by Total Tokens', sortCost: 'Sort by Est. Cost', sortNet: 'Sort by Net Output',
+      thSessionId: 'Session ID', thModels: 'Models', thBreakdown: 'Mix', thNet: 'Net Tokens',
+      showMore: 'Show more ({n} total)', showLess: 'Show less',
+      copied: 'Session ID copied to clipboard', copyBtn: 'Copy',
+      noSessionsFound: 'No matching sessions found',
+      evUnit: ' msgs',
+
+      srcTitle: 'Data Sources & Coverage', srcBadge: 'Local agent logs ▾',
+      noteTokenOk: 'Full tokens & cost', noteTokenOnly: 'Tokens only; cost estimated from models.dev (≈)', noteEventsOnly: 'No local tokens, activity only',
+      estCostSrc: 'Estimated from models.dev price list (no recorded cost for this source)',
+
+      footer1: 'Source: local logs / databases of each agent (see "Data Sources" above). Processed locally, nothing uploaded.',
+      footer2: '"Est. cost" is an equivalent reference (USD) from each source\'s catalog pricing, not an actual charge. Some tools don\'t log tokens locally — activity only.',
       rangeLabel: 'Range: ',
-      totalTokens: 'Total tokens', peakDay: 'Peak day', avgSession: 'Avg per session',
-      curStreak: 'Current streak', bestStreak: 'Longest streak', rangeTokens: 'Tokens in range',
-      avgDaily: 'Daily avg (active days)', activeDaysRange: 'Active days / range', bestStreakRange: 'Longest streak in range',
-      daysUnit: 'days',
-      totalSessions: 'Total sessions', activeDays: 'Active days', bestDay: 'Best day', spanDays: 'Days in range',
-      inputTokens: 'Input tokens', outputTokens: 'Output tokens', cacheRead: 'Cache read', cacheWrite: 'Cache write',
-      estCost: 'Est. cost (API price)', avgDailyCost: 'Avg daily cost',
-      cacheTokens: 'Cache tokens', hitRate: 'Cache hit rate', todayTokens: 'Today tokens', weekTokens: 'This week tokens',
-      avgDailyCache: 'Avg daily cache', cacheShare: 'Cache share',
-      nInput: 'New input', nOutput: 'Output', nCacheRead: 'Cache read',
+      nInput: 'New input', nOutput: 'Output', nCacheRead: 'Cache read', nEvents: 'Messages/events',
       noRecord: 'No data', estCostTip: 'Est. cost', noRangeRecords: 'No records in this range',
-      noteOfficial: 'Official price', noteHalf: 'No public price; half rate per official docs', noteK27: 'K2.7 Code',
       noDataTitle: 'No data yet',
-      noDataHint: 'No Kimi Code sessions to analyze yet. Have a few conversations first, then click "Refresh" in the top right, or run ./refresh.sh.',
+      noDataHint: 'No agent usage to analyze yet. Run a few sessions with any supported agent, then click "Refresh" in the top right, or run ./refresh.sh.',
       noFileTitle: 'No data file yet',
       noFileHint: 'Run <code>npm install</code> and <code>./refresh.sh</code> in the project directory to generate the data, then reload; or just run <code>./start.sh</code>.',
       refreshFail: 'Refresh failed:\n', noServer: 'Cannot reach the local server. Run this in the project directory first:\n./start.sh',
@@ -370,19 +841,34 @@
       locale: 'en-US',
     },
   };
-  let lang = localStorage.getItem('kimi-dash-lang') === 'en' ? 'en' : 'zh'; // 默认中文
+
+  let lang = localStorage.getItem('agent-dash-lang') === 'en' ? 'en' : 'zh';
   let S = I18N[lang];
-  // 静态文案：data-i18n → innerHTML（词典是本站自有内容，含 <code> 标签）；data-i18n-ph → placeholder
+
   function applyStatic() {
     document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
     document.title = S.pageTitle;
-    document.querySelectorAll('[data-i18n]').forEach(el => { el.innerHTML = S[el.dataset.i18n]; });
-    document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = S[el.dataset.i18nPh]; });
-    document.getElementById('langBtn').textContent = lang === 'zh' ? 'EN' : 'CN'; // 按钮显示目标语言
+    document.querySelectorAll('[data-i18n]').forEach(el => { el.innerHTML = S[el.dataset.i18n] || ''; });
+    document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = S[el.dataset.i18nPh] || ''; });
+    document.getElementById('langBtn').textContent = lang === 'zh' ? 'EN' : '中文';
   }
+
+  const toastContainer = document.getElementById('toast');
+  function showToast(msg, isError = false) {
+    const el = document.createElement('div');
+    el.className = 'toast-msg' + (isError ? ' error' : '');
+    el.textContent = msg;
+    toastContainer.appendChild(el);
+    setTimeout(() => el.classList.add('show'), 10);
+    setTimeout(() => {
+      el.classList.remove('show');
+      setTimeout(() => el.remove(), 250);
+    }, 2400);
+  }
+
   const D = window.DASHBOARD_DATA;
   applyStatic();
-  // data.js 缺失（还没跑过 ./refresh.sh）或结构不对时给出提示，而不是白屏报错
+
   if (!D || !Array.isArray(D.daily)) {
     document.querySelectorAll('.wrap > *:not(header)').forEach(el => el.remove());
     document.querySelector('.wrap').insertAdjacentHTML('beforeend',
@@ -390,102 +876,37 @@
     document.getElementById('gen').textContent = '—';
     return;
   }
-  const daily = D.daily.slice().sort((a, b) => a.date < b.date ? -1 : 1);
-  const byDate = Object.fromEntries(daily.map(d => [d.date, d]));
 
-  // 空数据兜底：还没有会话日志时直接提示，避免后续 daily[0] 等访问崩溃
-  if (!daily.length) {
-    document.querySelectorAll('.wrap > *:not(header)').forEach(el => el.remove());
-    document.querySelector('.wrap').insertAdjacentHTML('beforeend',
-      `<div class="card"><h2>${S.noDataTitle}</h2><div class="hint">${S.noDataHint}</div></div>`);
-    document.getElementById('gen').textContent =
-      new Date(D.generatedAt).toLocaleString(S.locale, { hour12: false });
-    const btn = document.getElementById('refreshBtn');
-    btn.addEventListener('click', async () => {
-      btn.disabled = true; btn.textContent = S.refreshing;
-      try {
-        const r = await fetch('/refresh', { method: 'POST' });
-        const body = await r.json();
-        if (body.ok) { location.reload(); return; }
-        alert(S.refreshFail + (body.log || '?'));
-      } catch (e) {
-        alert(S.noServer);
-      }
-      btn.disabled = false; btn.textContent = S.refresh;
-    });
-    return;
-  }
-
-  // ---------- 柱状图模型筛选 ----------
-  let selModel = 'all';
-  const allModels = [...new Set(daily.flatMap(d => (d.modelBreakdowns || []).map(b => b.modelName)))].sort();
-  const barSel = document.getElementById('barModelSel');
-  // 用 DOM API 赋值而不是拼 innerHTML：既防 XSS，也不会把转义后的字符串当成 option 的值
-  function rebuildBarSel() {
-    barSel.innerHTML = '';
-    barSel.add(new Option(S.allModels, 'all'));
-    allModels.forEach(m => barSel.add(new Option(m, m)));
-    barSel.value = selModel;
-  }
-  rebuildBarSel();
-  barSel.addEventListener('change', e => {
-    selModel = e.target.value;
-    renderBars();
-  });
-  // 按选中模型取当日记录；'all' 返回整天聚合，否则返回该模型的 breakdown
-  function dayRec(ds) {
-    const rec = byDate[ds];
-    if (!rec) return null;
-    if (selModel === 'all') return rec;
-    const b = (rec.modelBreakdowns || []).find(x => x.modelName === selModel);
-    if (!b) return null;
-    return {
-      inputTokens: b.inputTokens, outputTokens: b.outputTokens,
-      cacheReadTokens: b.cacheReadTokens, cacheCreationTokens: b.cacheCreationTokens,
-      totalTokens: b.inputTokens + b.outputTokens + b.cacheReadTokens + b.cacheCreationTokens,
-      cost: b.cost,
-    };
-  }
-
-  // ---------- helpers ----------
-  function fmt(n) { // 大数缩写：中文用 万/亿，英文用 K/M/B
-    if (!Number.isFinite(n)) return '—'; // 数据异常兜底，别显示 NaN
-    if (lang === 'en') {
-      if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
-      if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
-      if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
-      return n.toLocaleString('en-US');
-    }
-    if (n >= 1e8) return (n / 1e8).toFixed(1) + ' 亿';
-    if (n >= 1e4) return (n / 1e4).toFixed(1) + ' 万';
+  // ---------- Helpers ----------
+  function fmt(n) {
+    if (!Number.isFinite(n)) return '—';
+    const b = n / 1e9;
+    if (b >= 10) return b.toFixed(0) + 'B';
+    if (b >= 1) return b.toFixed(2).replace(/\.?0+$/, '') + 'B';
+    const m = n / 1e6;
+    if (m >= 100) return m.toFixed(0) + 'M';
+    if (m >= 10) return m.toFixed(1).replace(/\.0$/, '') + 'M';
+    if (m >= 0.1) return m.toFixed(2).replace(/\.?0+$/, '') + 'M';
+    if (n >= 1e4) return (n / 1e3).toFixed(0) + 'K';
     return n.toLocaleString('en-US');
   }
-  const fmtFull = n => n.toLocaleString('en-US');
-  // HTML 转义：modelName 等字段来自本机日志，拼进 innerHTML 前必须转义防 DOM XSS
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  // 用 UTC 午夜算日期序号，避免夏令时时区下 86400000 硬编码误判相邻日/跨度
   const dayNum = ds => Date.UTC(+ds.slice(0, 4), +ds.slice(5, 7) - 1, +ds.slice(8, 10)) / 86400000;
-  // 官方 API 定价（¥ / 1M tokens）：https://platform.kimi.com/docs/pricing
-  // k3-256k 无公开 API 价，按 Kimi Code 文档「k3 (1M) 配额消耗约为 k3-256k 的 2 倍」折算半价
-  const PRICE = {
-    'k3':             { i: 20,  o: 100, cr: 2,   note: 'noteOfficial' },
-    'k3-256k':        { i: 10,  o: 50,  cr: 1,   note: 'noteHalf' },
-    'kimi-for-coding':{ i: 6.5, o: 27,  cr: 1.3, note: 'noteK27' },
-  };
-  function renderPrice() {
-    document.querySelector('#priceTable tbody').innerHTML = Object.entries(PRICE).map(([m, p]) =>
-      `<tr><td style="text-align:left">${m}</td><td>${p.i}</td><td>${p.cr}</td><td>${p.o}</td><td class="dim" style="text-align:left">${S[p.note]}</td></tr>`
-    ).join('');
-  }
-  renderPrice();
-  const costOf = mb => {
-    const p = PRICE[mb.modelName];
-    if (!p) return 0;
-    return (mb.inputTokens * p.i + mb.outputTokens * p.o + mb.cacheReadTokens * p.cr) / 1e6;
-  };
-  const fmtCost = c => !Number.isFinite(c) ? '—' : '¥' + (c >= 100 ? c.toFixed(0) : c.toFixed(2));
-  const C = { input: '#6366f1', output: '#10b981', cacheRead: '#c7d2fe', cacheCreation: '#fbbf24' };
   const sum = (arr, f) => arr.reduce((s, x) => s + f(x), 0);
+  const fmtCost = c => !Number.isFinite(c) ? '—' : '$' + (c >= 100 ? c.toFixed(0) : c.toFixed(2));
+  const fmtCostOr = c => c == null ? '—' : fmtCost(c);
+  // 记账成本与价目估算的统一渲染：$x = 来源记账；≈$x = models.dev 价目估算；未定价 = 无可用价目
+  const costCell = (rec, est, hasTok) => rec != null ? fmtCost(rec)
+    : (est ? `<span class="est-cost" title="${S.estCostSrc}">≈${fmtCost(est)}</span>`
+           : (hasTok ? `<span class="unpriced">${S.unpriced}</span>` : '—'));
+
+  const AGENTS = Object.fromEntries((D.agents || []).map(a => [a.id, a]));
+  const agentLabel = id => (AGENTS[id] && AGENTS[id].label) || id;
+  const agentColor = id => (AGENTS[id] && AGENTS[id].color) || '#64748b';
+  const agentTag = id =>
+    `<span class="agent-tag"><span class="cdot" style="background:${agentColor(id)}"></span>${esc(agentLabel(id))}</span>`;
+
+  const C = { input: '#4f46e5', output: '#059669', cacheRead: '#38bdf8', cacheCreation: '#f59e0b', cost: '#6366f1', events: '#0ea5e9' };
 
   const tooltip = document.getElementById('tooltip');
   function showTip(html, x, y) {
@@ -498,26 +919,306 @@
   function hideTip() { tooltip.style.display = 'none'; }
 
   const today = new Date();
-  const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; // 本地日期，不能用 toISOString（UTC 会在早 8 点前差一天）
+  const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const todayStr = iso(today);
-  const firstDate = daily[0].date;
 
-  // ---------- header ----------
   function renderGen() {
     document.getElementById('gen').textContent =
       new Date(D.generatedAt).toLocaleString(S.locale, { hour12: false });
   }
   renderGen();
 
-  // ---------- global stats (不受时间范围影响) ----------
-  const dateSet = new Set(daily.map(d => d.date));
+  if (!D.daily.length) {
+    document.querySelectorAll('.wrap > *:not(header)').forEach(el => el.remove());
+    document.querySelector('.wrap').insertAdjacentHTML('beforeend',
+      `<div class="card"><h2>${S.noDataTitle}</h2><div class="hint">${S.noDataHint}</div></div>`);
+    const btn = document.getElementById('refreshBtn');
+    btn.addEventListener('click', async () => {
+      btn.disabled = true; btn.textContent = S.refreshing;
+      try {
+        const r = await fetch('/refresh', { method: 'POST' });
+        const body = await r.json();
+        if (body.ok) { location.reload(); return; }
+        showToast(S.refreshFail + (body.log || '?'), true);
+      } catch (e) {
+        showToast(S.noServer, true);
+      }
+      btn.disabled = false; btn.textContent = S.refresh;
+    });
+    return;
+  }
+
+  // ---------- View state ----------
+  const rawDaily = D.daily;            // [{date, agent, ...tokens, costUsd, events, modelBreakdowns}]
+  const rawProjDaily = D.projectDaily || [];  // [{date, agent, project, ...}]
+  let agentSel = 'all', selModel = 'all', projSel = 'all';
+  let daily = [], byDate = {}, firstDate = todayStr;
+  let hasTok = true;                    // 当前筛选+范围内是否有 token 数据
+  let hasTokBase = true;                // 来源是否能产出 token（不限范围）
+  let viewRows = [];                    // agent+project 过滤后的源行（供 Agent 表等复用）
+
+  function rebuildView() {
+    const src = (projSel === 'all' ? rawDaily : rawProjDaily)
+      .filter(r => (agentSel === 'all' || r.agent === agentSel) &&
+                   (projSel === 'all' || r.project === projSel));
+    viewRows = src;
+    const map = {};
+    for (const r of src) {
+      const mbs = selModel === 'all' ? (r.modelBreakdowns || [])
+        : (r.modelBreakdowns || []).filter(mb => modelMatch(mb.modelName));
+      if (selModel !== 'all' && !mbs.length && !r.events) continue;
+      let d = map[r.date];
+      if (!d) {
+        d = map[r.date] = {
+          date: r.date, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0,
+          cacheCreationTokens: 0, totalTokens: 0, costUsd: null, costEst: null, events: 0, _m: {},
+        };
+      }
+      if (selModel === 'all') {
+        d.inputTokens += r.inputTokens; d.outputTokens += r.outputTokens;
+        d.cacheReadTokens += r.cacheReadTokens; d.cacheCreationTokens += r.cacheCreationTokens;
+        d.totalTokens += r.totalTokens;
+        if (r.costUsd != null) d.costUsd = (d.costUsd || 0) + r.costUsd;
+        if (r.costEst != null) d.costEst = (d.costEst || 0) + r.costEst;
+      } else {
+        let mc = null, mce = null;
+        for (const mb of mbs) {
+          d.inputTokens += mb.inputTokens; d.outputTokens += mb.outputTokens;
+          d.cacheReadTokens += mb.cacheReadTokens; d.cacheCreationTokens += mb.cacheCreationTokens;
+          d.totalTokens += mb.inputTokens + mb.outputTokens + mb.cacheReadTokens + (mb.cacheCreationTokens || 0);
+          if (mb.cost != null) mc = (mc || 0) + mb.cost;
+          if (mb.costEst != null) mce = (mce || 0) + mb.costEst;
+        }
+        if (mc != null) d.costUsd = (d.costUsd || 0) + mc;
+        if (mce != null) d.costEst = (d.costEst || 0) + mce;
+      }
+      d.events += r.events || 0;
+      for (const mb of mbs) {
+        const key = mb.modelName;   // 同名模型跨 agent 合并，agent 记进集合
+        const m = d._m[key] = d._m[key] || {
+          modelName: mb.modelName, agents: new Set(),
+          inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, cost: 0, costEst: 0,
+        };
+        m.agents.add(r.agent);
+        m.inputTokens += mb.inputTokens; m.outputTokens += mb.outputTokens;
+        m.cacheReadTokens += mb.cacheReadTokens; m.cacheCreationTokens += mb.cacheCreationTokens;
+        m.cost += mb.cost || 0;
+        m.costEst += mb.costEst || 0;
+      }
+    }
+    daily = Object.values(map).sort((a, b) => a.date < b.date ? -1 : 1)
+      .map(d => ({ ...d, modelBreakdowns: Object.values(d._m) }));
+    byDate = Object.fromEntries(daily.map(d => [d.date, d]));
+    firstDate = daily.length ? daily[0].date : todayStr;
+    const meta = agentSel === 'all' ? null : AGENTS[agentSel];
+    hasTokBase = projSel === 'all'
+      ? (!meta || meta.hasTokens !== false)
+      : src.some(r => r.totalTokens > 0);
+  }
+
+  // 小时粒度行（仅原生解析来源产出），跟随全局筛选
+  function filteredHourly() {
+    return (D.hourly || []).filter(r =>
+      (agentSel === 'all' || r.agent === agentSel) &&
+      (projSel === 'all' || r.project === projSel) &&
+      modelMatch(r.model));
+  }
+
+  // ---------- Model developer grouping ----------
+  // 优先用 models.dev 的 provider 归属（随 data.js 下发），本地规则兜底
+  const DEV_RULES = [
+    [/^claude/, 'Anthropic'],
+    [/^(gpt|o\d|codex|chatgpt|openai)/, 'OpenAI'],
+    [/^gemini/, 'Google'],
+    [/^grok/, 'xAI'],
+    [/^deepseek/, 'DeepSeek'],
+    [/^(kimi|moonshot|k\d)/, 'Moonshot AI'],
+    [/^(glm|chatglm)/, 'Zhipu AI'],
+    [/^(qwen|qwq)/, 'Alibaba'],
+    [/^llama/, 'Meta'],
+    [/^(mistral|codestral|devstral|pixtral|magistral|voxtral)/, 'Mistral AI'],
+    [/^(composer|cursor)/, 'Cursor'],
+    [/^(swe-|cognition|devin)/, 'Cognition'],
+    [/^(minimax|abab)/, 'MiniMax'],
+    [/^(doubao|seed)/, 'ByteDance'],
+    [/^mimo/, 'Xiaomi'],
+    [/^step/, 'StepFun'],
+    [/^hy\d/, 'Tencent'],
+    [/^yi($|-)/, '01.AI'],
+    [/^phi/, 'Microsoft'],
+    [/^(command|c4ai)/, 'Cohere'],
+    [/^nova/, 'Amazon'],
+    [/^(nemotron|nvidia)/, 'NVIDIA'],
+  ];
+  const devOf = m => (D.modelDevs || {})[m] ||
+    (DEV_RULES.find(r => r[0].test(m)) || [0, S.devOther])[1];
+  // selModel 可为 'all'、模型名或 'dev:<开发商>'（整组筛选）
+  const modelMatch = m => selModel === 'all' || m === selModel ||
+    (selModel.startsWith('dev:') && devOf(m) === selModel.slice(4));
+
+  // ---------- Filter selectors (Agent / Model / Project) ----------
+  const agentSelEl = document.getElementById('agentSel');
+  const modelSelEl = document.getElementById('modelSel');       // 自绘树形下拉容器
+  const modelSelBtn = document.getElementById('modelSelBtn');
+  const modelSelTxt = document.getElementById('modelSelTxt');
+  const modelSelPanel = document.getElementById('modelSelPanel');
+  const projSelEl = document.getElementById('projSel');
+
+  function closeModelPanel() {
+    modelSelEl.classList.remove('open');
+    modelSelBtn.setAttribute('aria-expanded', 'false');
+  }
+  function pickModel(v) { selModel = v; closeModelPanel(); onFilterChange(); }
+
+  // 面板：全部模型 + 开发商组（默认折叠，展开后首项"全部"=整组筛选）
+  function renderModelPanel(byDev, mTot, devOrder) {
+    modelSelPanel.innerHTML = '';
+    const allItem = document.createElement('div');
+    allItem.className = 'msel-item' + (selModel === 'all' ? ' sel' : '');
+    allItem.textContent = S.allModels;
+    allItem.setAttribute('role', 'option');
+    allItem.addEventListener('click', () => pickModel('all'));
+    modelSelPanel.appendChild(allItem);
+    if (!devOrder.length) return;
+    for (const d of devOrder) {
+      const names = byDev[d].sort((a, b) => mTot[b] - mTot[a]);
+      const devTot = names.reduce((s, n) => s + mTot[n], 0);
+      const devSel = selModel === 'dev:' + d;
+      const inSel = names.includes(selModel);
+      const head = document.createElement('div');
+      head.className = 'msel-dev' + (devSel ? ' sel' : '') + (inSel ? ' open' : '');
+      head.innerHTML = `<span class="msel-arrow">▸</span><span style="overflow:hidden;text-overflow:ellipsis">${esc(d)}</span><span class="cnt">${fmt(devTot)}</span>`;
+      const kids = document.createElement('div');
+      kids.className = 'msel-models';
+      kids.style.display = inSel ? '' : 'none';
+      // 点行 = 选整个开发商；点 ▸ = 展开/收起模型列表
+      head.addEventListener('click', () => pickModel('dev:' + d));
+      head.querySelector('.msel-arrow').addEventListener('click', e => {
+        e.stopPropagation();
+        const open = kids.style.display === 'none';
+        kids.style.display = open ? '' : 'none';
+        head.classList.toggle('open', open);
+      });
+      for (const n of names) {
+        const it = document.createElement('div');
+        it.className = 'msel-item' + (selModel === n ? ' sel' : '');
+        it.setAttribute('role', 'option');
+        it.innerHTML = `<span style="overflow:hidden;text-overflow:ellipsis">${esc(n)}</span><span class="cnt">${fmt(mTot[n])}</span>`;
+        it.addEventListener('click', () => pickModel(n));
+        kids.appendChild(it);
+      }
+      modelSelPanel.appendChild(head);
+      modelSelPanel.appendChild(kids);
+    }
+  }
+
+  function fillSelect(el, current, items) {
+    el.innerHTML = '';
+    for (const [v, t] of items) el.add(new Option(t, v));
+    if (!items.some(([v]) => v === current)) return false;
+    el.value = current;
+    return true;
+  }
+
+  function renderAgentBar() {
+    let reset = false;
+    document.getElementById('agentBarLabel').textContent = S.agentFilter;
+    document.getElementById('modelBarLabel').textContent = S.modelFilter;
+    document.getElementById('projBarLabel').textContent = S.projFilter;
+    agentSelEl.setAttribute('aria-label', S.agentFilter.trim());
+    modelSelBtn.setAttribute('aria-label', S.modelFilter.trim());
+    projSelEl.setAttribute('aria-label', S.projFilter.trim());
+    if (!fillSelect(agentSelEl, agentSel,
+      [['all', S.allAgents], ...D.agents.map(a => [a.id, a.label])])) {
+      agentSel = 'all'; agentSelEl.value = 'all'; reset = true;
+    }
+
+    const mTot = {};
+    for (const r of viewRows) for (const mb of r.modelBreakdowns || [])
+      mTot[mb.modelName] = (mTot[mb.modelName] || 0) + mb.inputTokens + mb.outputTokens + mb.cacheReadTokens + (mb.cacheCreationTokens || 0);
+    // 模型下拉：树形（开发商 → 模型，默认折叠）
+    const byDev = {};
+    for (const n of Object.keys(mTot)) (byDev[devOf(n)] = byDev[devOf(n)] || []).push(n);
+    const devOrder = Object.keys(byDev).sort((a, b) =>
+      byDev[b].reduce((s, n) => s + mTot[n], 0) - byDev[a].reduce((s, n) => s + mTot[n], 0));
+    if (!(selModel === 'all' || selModel in mTot || (selModel.startsWith('dev:') && selModel.slice(4) in byDev))) {
+      selModel = 'all'; reset = true;
+    }
+    modelSelTxt.textContent = selModel === 'all' ? S.allModels
+      : selModel.startsWith('dev:') ? selModel.slice(4) : selModel;
+    renderModelPanel(byDev, mTot, devOrder);
+
+    const pTot = {};
+    for (const r of rawProjDaily)
+      if (agentSel === 'all' || r.agent === agentSel)
+        pTot[r.project] = (pTot[r.project] || 0) + r.totalTokens + (r.events || 0);
+    for (const s of D.sessions || [])
+      if ((agentSel === 'all' || s.agent === agentSel) && s.project && !(s.project in pTot))
+        pTot[s.project] = s.totalTokens + (s.events || 0);
+    const pItems = Object.entries(pTot).sort((a, b) => b[1] - a[1]).map(([n]) => [n, n]);
+    if (!fillSelect(projSelEl, projSel, [['all', S.allProjects], ...pItems])) {
+      projSel = 'all'; projSelEl.value = 'all'; reset = true;
+    }
+    return reset;
+  }
+
+  function onFilterChange() { onAgentChange(); }
+  agentSelEl.addEventListener('change', e => { agentSel = e.target.value; onFilterChange(); });
+  projSelEl.addEventListener('change', e => { projSel = e.target.value; onFilterChange(); });
+  modelSelBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    const open = modelSelEl.classList.toggle('open');
+    modelSelBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  document.addEventListener('click', e => { if (!modelSelEl.contains(e.target)) closeModelPanel(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModelPanel(); });
+
+  // ---------- Range state ----------
+  let rangeEnd = todayStr;
+  let rangeStart = todayStr;   // 在 init 里 rebuildView() 后按 firstDate 重设
+  let activePreset = '7';
+
+  function syncUrl() {
+    const q = new URLSearchParams(location.search);
+    q.delete('p'); q.delete('s'); q.delete('e');
+    if (activePreset) q.set('p', activePreset);
+    else { q.set('s', rangeStart); q.set('e', rangeEnd); }
+    if (agentSel !== 'all') q.set('a', agentSel); else q.delete('a');
+    if (selModel !== 'all') q.set('m', selModel); else q.delete('m');
+    if (projSel !== 'all') q.set('pj', projSel); else q.delete('pj');
+    history.replaceState(null, '', '?' + q.toString());
+  }
+
+  // ---------- Day record accessor ----------
+  function modelKeyOf(mb) { return mb.modelName; }
+
+  // 模式判定：范围内无 token 但有活动量时切到活动口径；随范围联动
+  function updateMode() {
+    const inR = d => d.date >= rangeStart && d.date <= rangeEnd;
+    const rTok = daily.some(d => inR(d) && d.totalTokens > 0);
+    const rEv = daily.some(d => inR(d) && d.events > 0);
+    hasTok = hasTokBase && (rTok || !rEv);
+    if (!hasTok) barMode = 'events';
+    else if (barMode === 'events') barMode = 'total';
+    document.getElementById('barModeTabs').style.display = hasTok ? '' : 'none';
+    document.getElementById('heatMetricTabs').style.display = hasTok ? '' : 'none';
+    document.getElementById('dailyHint').textContent = hasTok ? S.dailyHint : S.dailyHintE;
+  }
+
+  function dayRec(ds) {
+    // rebuildView 已按 selModel（含 dev: 组）过滤，byDate 记录即为筛选口径
+    return byDate[ds] || null;
+  }
+
+  // ---------- Streak ----------
   let curStreak = 0;
-  {
+  function computeStreak() {
+    curStreak = 0;
+    const dateSet = new Set(daily.map(d => d.date));
     const d = new Date(today);
     if (!dateSet.has(iso(d))) d.setDate(d.getDate() - 1);
     while (dateSet.has(iso(d))) { curStreak++; d.setDate(d.getDate() - 1); }
   }
-
   function longestStreak(days) {
     let best = 0, run = 0, prev = null;
     for (const d of days) {
@@ -529,8 +1230,8 @@
     return best;
   }
 
-  // ---------- heatmap（固定最近一年，不随范围变化） ----------
-  const HEAT = ['#ebedf0', '#c6e48b', '#7bc96f', '#239a3b', '#196127'];
+  // ---------- Heatmap ----------
+  const HEAT = ['#ebedf0', '#bbf7d0', '#86efac', '#22c55e', '#15803d'];
   const yearAgo = new Date(today); yearAgo.setDate(today.getDate() - 364);
   const heatStart = new Date(yearAgo); heatStart.setDate(yearAgo.getDate() - ((yearAgo.getDay() + 6) % 7));
   const weeks = [];
@@ -538,43 +1239,49 @@
     const d = new Date(heatStart);
     while (d <= today) {
       const wk = [];
-      for (let i = 0; i < 7; i++) {
-        wk.push(d <= today ? iso(d) : null);
-        d.setDate(d.getDate() + 1);
-      }
+      for (let i = 0; i < 7; i++) { wk.push(d <= today ? iso(d) : null); d.setDate(d.getDate() + 1); }
       weeks.push(wk);
     }
   }
-  // 计量单位：tokens / cost（估算费用，按官方 API 价折算）
+
   let heatMetric = 'tokens';
-  const dayCost = rec => rec ? sum(rec.modelBreakdowns || [], costOf) : 0;
-  const heatVal = rec => heatMetric === 'cost' ? dayCost(rec) : (rec ? rec.totalTokens : 0);
-  const maxT = Math.max(...daily.map(d => d.totalTokens), 1);
-  const maxC = Math.max(...daily.map(dayCost), 1e-9);
+  const dayCost = rec => rec ? (rec.costUsd ?? rec.costEst ?? 0) : 0;
+  const heatVal = rec => {
+    if (!rec) return 0;
+    if (!hasTok) return rec.events;
+    return heatMetric === 'cost' ? dayCost(rec) : rec.totalTokens;
+  };
+  let maxT = 1, maxC = 1e-9, maxE = 1;
+  function computeMaxes() {
+    maxT = Math.max(...daily.map(d => d.totalTokens), 1);
+    maxC = Math.max(...daily.map(dayCost), 1e-9);
+    maxE = Math.max(...daily.map(d => d.events), 1);
+  }
   function heatColor(v) {
     if (!v) return HEAT[0];
-    const r = v / (heatMetric === 'cost' ? maxC : maxT);
+    const mx = !hasTok ? maxE : (heatMetric === 'cost' ? maxC : maxT);
+    const r = v / mx;
     return HEAT[r < 0.15 ? 1 : r < 0.35 ? 2 : r < 0.65 ? 3 : 4];
   }
   const heatEl = document.getElementById('heatmap');
   function renderHeat() {
-    // 月份标签随语言变化（zh: 8月；en: Aug），所以放在渲染函数里重算
     let labels = '', lastM = '', lastLabelIdx = -99;
     weeks.forEach((wk, wi) => {
       const ds = wk.find(Boolean);
       const m = ds ? ds.slice(0, 7) : '';
       if (m && m !== lastM && wi - lastLabelIdx >= 3) {
-        labels += `<span>${lang === 'en' ? S.months[+m.slice(5) - 1] : +m.slice(5) + '月'}</span>`;
+        labels += `<span>${lang === 'en' ? (S.months ? S.months[+m.slice(5) - 1] : m.slice(5)) : +m.slice(5) + '月'}</span>`;
         lastM = m; lastLabelIdx = wi;
+      } else {
+        labels += '<span></span>';
       }
-      else labels += '<span></span>';
     });
     let heatHtml = '';
     weeks.forEach(wk => {
       heatHtml += '<div class="wk">';
       wk.forEach(ds => {
         if (!ds) { heatHtml += '<div class="d" style="visibility:hidden"></div>'; return; }
-        const rec = byDate[ds]; // 热力图固定按全天总量，不随柱状图的模型筛选变化（否则颜色和 tooltip 口径不一致）
+        const rec = byDate[ds];
         const v = heatVal(rec);
         heatHtml += `<div class="d" data-d="${ds}" data-v="${v}" style="background:${heatColor(v)}"></div>`;
       });
@@ -583,201 +1290,728 @@
     heatEl.innerHTML = `<div class="month-labels">${labels}</div><div class="heat">${heatHtml}</div>`;
   }
   function renderHeatTitle() {
-    document.getElementById('heatTitle').textContent = heatMetric === 'cost' ? S.heatTitleC : S.heatTitleT;
+    document.getElementById('heatTitle').textContent =
+      !hasTok ? S.heatTitleE : (heatMetric === 'cost' ? S.heatTitleC : S.heatTitleT);
+    document.getElementById('heatMetricTabs').style.display = hasTok ? '' : 'none';
   }
-  renderHeatTitle();
-  renderHeat();
   document.getElementById('heatMetricTabs').addEventListener('click', e => {
     const b = e.target.closest('button');
     if (!b || b.dataset.m === heatMetric) return;
     heatMetric = b.dataset.m;
-    document.querySelectorAll('#heatMetricTabs button').forEach(x => x.classList.toggle('on', x === b));
+    document.querySelectorAll('#heatMetricTabs button').forEach(x => {
+      x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b);
+    });
     renderHeatTitle();
     renderHeat();
   });
-  document.getElementById('heatRange').textContent = iso(heatStart) + ' - ' + todayStr;
+  document.getElementById('heatRange').textContent = iso(heatStart) + ' ~ ' + todayStr;
   document.getElementById('legendSw').innerHTML =
     HEAT.map(c => `<span class="d" style="background:${c}"></span>`).join('');
+
   heatEl.addEventListener('mousemove', e => {
     const el = e.target.closest('.d');
     if (!el || !el.dataset.d) { hideTip(); return; }
     const v = +el.dataset.v;
-    showTip(`<div class="t">${el.dataset.d}</div>${v ? (heatMetric === 'cost' ? fmtCost(v) : fmt(v) + ' tokens') : S.noRecord}`, e.clientX, e.clientY);
+    const rec = byDate[el.dataset.d];
+    const txt = !v ? S.noRecord
+      : !hasTok ? `${fmt(v)} ${S.kpiEventsUnit}`
+      : heatMetric === 'cost' ? costCell(rec && rec.costUsd, rec && rec.costEst, true) : fmt(v) + ' tokens';
+    showTip(`<div class="t">${el.dataset.d}</div>${txt}`, e.clientX, e.clientY);
   });
   heatEl.addEventListener('mouseleave', hideTip);
-  heatEl.addEventListener('mousedown', hideTip);
 
-  // ---------- 时间范围状态 ----------
-  let rangeEnd = todayStr; // 默认近 7 日
-  let rangeStart = (() => { const d0 = new Date(today); d0.setDate(d0.getDate() - 6); return iso(d0) < firstDate ? firstDate : iso(d0); })();
-  let activePreset = '7'; // 当前选中的预设；自定义范围时为 null，刷新时用它恢复视图
-  const isAll = () => rangeStart <= firstDate && rangeEnd >= todayStr;
+  // ---------- Hero KPI ----------
+  // 环比：与当前范围等长的上一周期对比（无数据自动隐藏）
+  function deltaSpan(cur, prev, pp) {
+    if (!prev) return '';
+    if (pp) {
+      const d = (cur - prev) * 100;
+      return Math.abs(d) < 0.05 ? '' : `<span class="hero-delta">${d > 0 ? '+' : ''}${d.toFixed(1)}pp</span>`;
+    }
+    const d = (cur - prev) / prev * 100;
+    if (!isFinite(d) || Math.abs(d) < 0.05) return '';
+    return `<span class="hero-delta">${d > 0 ? '+' : ''}${d.toFixed(1)}%</span>`;
+  }
 
-  // ---------- 范围内渲染 ----------
-  const kv = (id, rows) => {
-    document.getElementById(id).innerHTML = rows.map(r =>
-      `<div><div class="k">${r[0]}</div><div class="v">${r[1]}</div></div>`).join('');
-  };
-
-  function renderRange() {
-    const days = daily.filter(d => d.date >= rangeStart && d.date <= rangeEnd);
-    const spanDays = dayNum(rangeEnd) - dayNum(rangeStart) + 1;
+  function renderHero(days, spanDays) {
     const tot = sum(days, d => d.totalTokens);
     const inp = sum(days, d => d.inputTokens);
     const out = sum(days, d => d.outputTokens);
     const cr = sum(days, d => d.cacheReadTokens);
-    const cw = sum(days, d => d.cacheCreationTokens);
-    const all = isAll();
-    const best = days.length
-      ? days.reduce((m, d) => d.totalTokens > m.totalTokens ? d : m, days[0])
-      : null;
-    const rangeBestStreak = longestStreak(days);
-    const hitRate = cr / Math.max(cr + inp, 1);
-    const cost = sum(days, d => sum(d.modelBreakdowns || [], costOf));
+    const ev = sum(days, d => d.events);
+    const nSess = agentSel === 'all'
+      ? new Set((D.sessions || []).map(s => s.agent + ':' + s.sessionId)).size
+      : (D.sessions || []).filter(s => s.agent === agentSel).length;
 
-    document.getElementById('rangeLabel').textContent = `${S.rangeLabel}${rangeStart} ~ ${rangeEnd}`;
-    document.getElementById('barRange').textContent = `${rangeStart} ~ ${rangeEnd}`;
+    // 上一等长周期
+    const pEnd = new Date(rangeStart); pEnd.setDate(pEnd.getDate() - 1);
+    const pStart = new Date(pEnd); pStart.setDate(pStart.getDate() - (spanDays - 1));
+    const prevDays = daily.filter(d => d.date >= iso(pStart) && d.date <= iso(pEnd));
+    const pTot = sum(prevDays, d => d.totalTokens);
+    const pNet = sum(prevDays, d => d.inputTokens + d.outputTokens);
+    const pCost = sum(prevDays, d => d.costUsd ?? d.costEst ?? 0);
+    const pHit = sum(prevDays, d => d.cacheReadTokens) /
+      Math.max(sum(prevDays, d => d.cacheReadTokens) + sum(prevDays, d => d.inputTokens), 1);
 
-    // strip
-    const cells = all ? [
-      { v: fmt(tot), l: S.totalTokens },
-      { v: best ? fmt(best.totalTokens) : '—', l: best ? S.peakDay + ' · ' + best.date.slice(5) : S.peakDay },
-      { v: fmt(Math.round(tot / Math.max(D.sessions.length, 1))), l: S.avgSession },
-      { v: curStreak + ` <small>${S.daysUnit}</small>`, l: S.curStreak },
-      { v: rangeBestStreak + ` <small>${S.daysUnit}</small>`, l: S.bestStreak },
-    ] : [
-      { v: fmt(tot), l: S.rangeTokens },
-      { v: best ? fmt(best.totalTokens) : '—', l: best ? S.peakDay + ' · ' + best.date.slice(5) : S.peakDay },
-      { v: fmt(Math.round(tot / Math.max(days.length, 1))), l: S.avgDaily },
-      { v: `${days.length} <small>/ ${spanDays} ${S.daysUnit}</small>`, l: S.activeDaysRange },
-      { v: rangeBestStreak + ` <small>${S.daysUnit}</small>`, l: S.bestStreakRange },
-    ];
-    document.getElementById('strip').innerHTML =
-      cells.map(c => `<div class="cell"><div class="v">${c.v}</div><div class="l">${c.l}</div></div>`).join('');
+    document.getElementById('kpiTotalTitle').textContent = hasTok ? S.kpiTotal : S.kpiEvents;
 
-    // metric cards
-    kv('kvActivity', all ? [
-      [S.totalSessions, D.sessions.length],
-      [S.activeDays, days.length],
-      [S.avgSession, fmt(Math.round(tot / Math.max(D.sessions.length, 1)))],
-      [S.bestDay, best ? fmt(best.totalTokens) : '—'],
-    ] : [
-      [S.activeDays, days.length],
-      [S.spanDays, spanDays],
-      [S.avgDaily, fmt(Math.round(tot / Math.max(days.length, 1)))],
-      [S.bestDay, best ? fmt(best.totalTokens) : '—'],
-    ]);
-    kv('kvToken', [
-      [S.inputTokens, fmt(inp)],
-      [S.outputTokens, fmt(out)],
-      [S.cacheRead, fmt(cr)],
-      [S.cacheWrite, fmt(cw)],
-      [S.estCost, fmtCost(cost)],
-      [S.avgDailyCost, fmtCost(cost / Math.max(days.length, 1))],
-    ]);
-    kv('kvCache', all ? [
-      [S.cacheTokens, fmt(cr)],
-      [S.hitRate, (hitRate * 100).toFixed(1) + '%'],
-      [S.todayTokens, fmt((byDate[todayStr] || {}).totalTokens || 0)],
-      [S.weekTokens, fmt(daily.filter(d => {
-        const ws = new Date(today); ws.setDate(today.getDate() - ((today.getDay() + 6) % 7));
-        return d.date >= iso(ws);
-      }).reduce((s, d) => s + d.totalTokens, 0))],
-    ] : [
-      [S.cacheTokens, fmt(cr)],
-      [S.hitRate, (hitRate * 100).toFixed(1) + '%'],
-      [S.avgDailyCache, fmt(Math.round(cr / Math.max(days.length, 1)))],
-      [S.cacheShare, (cr / Math.max(tot, 1) * 100).toFixed(1) + '%'],
-    ]);
+    if (hasTok) {
+      const net = inp + out;
+      const hitRate = cr / Math.max(cr + inp, 1);
+      const costKnown = days.some(d => d.costUsd != null);
+      const estKnown = !costKnown && days.some(d => d.costEst != null);
+      const cost = sum(days, d => d.costUsd ?? d.costEst ?? 0);
+      const avgDaily = Math.round(tot / Math.max(days.length, 1));
+      const rangeBestStreak = longestStreak(days);
 
-    renderBars();
-    renderModels(days);
+      document.getElementById('kpiTotalVal').innerHTML = fmt(tot) + deltaSpan(tot, pTot);
+      document.getElementById('kpiTotalSub').innerHTML =
+        `${S.kpiAvgDaily} <b>${fmt(avgDaily)}</b> · ${S.kpiActiveDays} <b>${days.length}/${spanDays} ${S.kpiDaysUnit}</b>`;
+      document.getElementById('kpiNetVal').innerHTML = fmt(net) + deltaSpan(net, pNet);
+      document.getElementById('kpiNetSub').innerHTML =
+        `<span class="dot-input"></span>${S.kpiInputDot} <b>${fmt(inp)}</b> · <span class="dot-output"></span>${S.kpiOutputDot} <b>${fmt(out)}</b>`;
+      document.getElementById('kpiCacheVal').innerHTML = (hitRate * 100).toFixed(1) + '%'
+        + (prevDays.length ? deltaSpan(hitRate, pHit, true) : '');
+      document.getElementById('kpiCacheSub').innerHTML =
+        `${S.nCacheRead} <b>${fmt(cr)}</b>`;
+      document.getElementById('kpiCostVal').innerHTML = (costKnown ? fmtCost(cost)
+        : (estKnown ? `<span class="est-cost" title="${S.estCostSrc}">≈${fmtCost(cost)}</span>` : '—'))
+        + ((costKnown || estKnown) ? deltaSpan(cost, pCost) : '');
+      document.getElementById('kpiCostSub').innerHTML = (costKnown || estKnown)
+        ? `${S.kpiAvgDaily} <b>${fmtCost(cost / Math.max(days.length, 1))}</b> · ${S.kpiStreakCur} <b>${curStreak} ${S.kpiDaysUnit}</b> (${S.kpiStreakMax} ${rangeBestStreak} ${S.kpiDaysUnit})`
+        : `${S.kpiStreakCur} <b>${curStreak} ${S.kpiDaysUnit}</b> (${S.kpiStreakMax} ${rangeBestStreak} ${S.kpiDaysUnit})`;
+    } else {
+      document.getElementById('kpiTotalVal').innerHTML = fmt(ev);
+      document.getElementById('kpiTotalSub').innerHTML =
+        `${S.kpiSessions} <b>${nSess}</b> · ${S.kpiActiveDays} <b>${days.length}/${spanDays} ${S.kpiDaysUnit}</b>`;
+      document.getElementById('kpiNetVal').innerHTML = '—';
+      document.getElementById('kpiNetSub').innerHTML = S.kpiNoToken;
+      document.getElementById('kpiCacheVal').innerHTML = '—';
+      document.getElementById('kpiCacheSub').innerHTML = '';
+      document.getElementById('kpiCostVal').innerHTML = '—';
+      document.getElementById('kpiCostSub').innerHTML = S.kpiNoToken;
+    }
   }
 
-  // ---------- bars ----------
-  function renderBars() {
-    const days = [];
-    for (let d = new Date(rangeStart); d <= new Date(rangeEnd); d.setDate(d.getDate() + 1)) days.push(iso(d));
+  // ---------- Daily Bars ----------
+  let barMode = 'total';
+  const barModeTabs = document.getElementById('barModeTabs');
+  barModeTabs.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b || b.dataset.bm === barMode) return;
+    barMode = b.dataset.bm;
+    document.querySelectorAll('#barModeTabs button').forEach(x => {
+      x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b);
+    });
+    renderBarLegend();
+    renderBars();
+  });
 
-    const W = 640, H = 220, padL = 62, padR = 56, padB = 26, padT = 8;
+  function renderBarLegend() {
+    const el = document.getElementById('barLegend');
+    if (!hasTok) {
+      el.innerHTML = `<span class="it"><span class="sw" style="background:${C.events}"></span>${S.nEvents}</span>`;
+    } else if (barMode === 'total') {
+      el.innerHTML = [['input', S.nInput], ['output', S.nOutput], ['cacheRead', S.nCacheRead]]
+        .map(([k, n]) => `<span class="it"><span class="sw" style="background:${C[k]}"></span>${n}</span>`).join('');
+    } else if (barMode === 'net') {
+      el.innerHTML = [['input', S.nInput], ['output', S.nOutput]]
+        .map(([k, n]) => `<span class="it"><span class="sw" style="background:${C[k]}"></span>${n}</span>`).join('');
+    } else {
+      el.innerHTML = `<span class="it"><span class="sw" style="background:${C.cost}"></span>${S.thCost}</span>`;
+    }
+  }
+
+  let barRecs = {};  // data-d -> rec，tooltip 用
+  function renderBars() {
+    // 单日范围且有小时粒度数据 → 每小时趋势
+    let buckets, recOf, labOf, keyOf;
+    if (rangeStart === rangeEnd) {
+      const hm = {};
+      for (const r of filteredHourly()) {
+        if (r.hour.slice(0, 10) !== rangeStart) continue;
+        const hh = r.hour.slice(11);
+        const b = hm[hh] = hm[hh] || {
+          inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0,
+          totalTokens: 0, costUsd: null, costEst: null, events: 0,
+        };
+        b.inputTokens += r.inputTokens; b.outputTokens += r.outputTokens;
+        b.cacheReadTokens += r.cacheReadTokens; b.cacheCreationTokens += r.cacheCreationTokens;
+        b.totalTokens += r.totalTokens; b.events += r.events || 0;
+        if (r.costUsd != null) b.costUsd = (b.costUsd || 0) + r.costUsd;
+        if (r.costEst != null) b.costEst = (b.costEst || 0) + r.costEst;
+      }
+      if (Object.keys(hm).length) {
+        buckets = [...Array(24).keys()].map(h => String(h).padStart(2, '0'));
+        recOf = h => hm[h];
+        labOf = h => `${h}:00`;
+        keyOf = h => `${rangeStart} ${h}:00`;
+      }
+    }
+    if (!buckets) {
+      const days = [];
+      for (let d = new Date(rangeStart); d <= new Date(rangeEnd); d.setDate(d.getDate() + 1)) days.push(iso(d));
+      buckets = days; recOf = dayRec; labOf = ds => ds.slice(5); keyOf = ds => ds;
+    }
+
+    const W = 680, H = 220, padL = 58, padR = 24, padB = 26, padT = 12;
     const plotW = W - padL - padR, plotH = H - padB - padT;
-    const maxV = Math.max(...days.map(ds => (dayRec(ds) || {}).totalTokens || 0), 1);
-    // 右轴：费用次坐标轴，刻度按范围内单日最高估算成本等比映射（精确费用见悬浮提示）
-    const dayCostOf = rec => !rec ? 0 : (rec.cost != null ? rec.cost : sum(rec.modelBreakdowns || [], costOf));
-    const maxCost = Math.max(...days.map(ds => dayCostOf(dayRec(ds))), 0);
-    const bw = plotW / days.length;
-    const labelStep = Math.max(1, Math.ceil(days.length / 12));
+    const dayCostOf = rec => !rec ? 0 : (rec.costUsd ?? rec.costEst ?? 0);
+
+    let maxVal = 1;
+    if (!hasTok) {
+      maxVal = Math.max(...buckets.map(bk => (recOf(bk) || {}).events || 0), 1);
+    } else if (barMode === 'total') {
+      maxVal = Math.max(...buckets.map(bk => (recOf(bk) || {}).totalTokens || 0), 1);
+    } else if (barMode === 'net') {
+      maxVal = Math.max(...buckets.map(bk => {
+        const r = recOf(bk); return r ? (r.inputTokens + r.outputTokens) : 0;
+      }), 1);
+    } else {
+      maxVal = Math.max(...buckets.map(bk => dayCostOf(recOf(bk))), 0.1);
+    }
+
+    const maxBarW = 28, maxSlotW = 84;
+    const slotW = Math.min(plotW / buckets.length, maxSlotW);
+    const totalBarsW = slotW * buckets.length;
+    const startX = padL + (plotW - totalBarsW) / 2;
+    const w = Math.min(Math.max(slotW * 0.52, 1.5), maxBarW);
+    const labelStep = Math.max(1, Math.ceil(buckets.length / 12));
+    barRecs = {};
+
     let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet">`;
     [0.25, 0.5, 0.75, 1].forEach(f => {
       const y = padT + plotH * (1 - f);
       svg += `<line class="grid-line" x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}"/>`;
-      svg += `<text class="axis" x="${padL - 6}" y="${y + 3}" text-anchor="end">${fmt(Math.round(maxV * f))}</text>`;
-      svg += `<text class="axis" x="${W - padR + 6}" y="${y + 3}" text-anchor="start">${fmtCost(maxCost * f)}</text>`;
+      const label = (hasTok && barMode === 'cost') ? fmtCost(maxVal * f) : fmt(Math.round(maxVal * f));
+      svg += `<text class="axis" x="${padL - 6}" y="${y + 3.5}" text-anchor="end">${label}</text>`;
     });
-    days.forEach((ds, i) => {
-      const rec = dayRec(ds);
-      const x = padL + i * bw + bw * 0.2, w = Math.max(bw * 0.6, 1);
+
+    buckets.forEach((bk, i) => {
+      const rec = recOf(bk), dd = keyOf(bk);
+      barRecs[dd] = rec || null;
+      const x = startX + i * slotW + (slotW - w) / 2;
       let y = padT + plotH, drew = false;
       if (rec) {
-        [['cacheRead', rec.cacheReadTokens], ['output', rec.outputTokens],
-         ['input', rec.inputTokens], ['cacheCreation', rec.cacheCreationTokens]].forEach(([k, v]) => {
-          const h = (v / maxV) * plotH;
-          if (h > 0) { y -= h; drew = true; svg += `<rect x="${x}" y="${y}" width="${w}" height="${Math.max(h, 0.5)}" fill="${C[k]}" rx="1.5" class="bar" data-d="${ds}"/>`; }
-        });
+        if (!hasTok) {
+          const h = (rec.events / maxVal) * plotH;
+          if (h > 0) {
+            y -= h; drew = true;
+            svg += `<rect x="${x}" y="${y}" width="${w}" height="${Math.max(h, 0.5)}" fill="${C.events}" rx="2.5" class="bar" data-d="${dd}"/>`;
+          }
+        } else if (barMode === 'total') {
+          [['cacheRead', rec.cacheReadTokens], ['output', rec.outputTokens],
+           ['input', rec.inputTokens], ['cacheCreation', rec.cacheCreationTokens]].forEach(([k, v]) => {
+            const h = (v / maxVal) * plotH;
+            if (h > 0) {
+              y -= h; drew = true;
+              svg += `<rect x="${x}" y="${y}" width="${w}" height="${Math.max(h, 0.5)}" fill="${C[k]}" rx="2.5" class="bar" data-d="${dd}"/>`;
+            }
+          });
+        } else if (barMode === 'net') {
+          [['output', rec.outputTokens], ['input', rec.inputTokens]].forEach(([k, v]) => {
+            const h = (v / maxVal) * plotH;
+            if (h > 0) {
+              y -= h; drew = true;
+              svg += `<rect x="${x}" y="${y}" width="${w}" height="${Math.max(h, 0.5)}" fill="${C[k]}" rx="2.5" class="bar" data-d="${dd}"/>`;
+            }
+          });
+        } else {
+          const h = (dayCostOf(rec) / maxVal) * plotH;
+          if (h > 0) {
+            y -= h; drew = true;
+            svg += `<rect x="${x}" y="${y}" width="${w}" height="${Math.max(h, 0.5)}" fill="${C.cost}" rx="2.5" class="bar" data-d="${dd}"/>`;
+          }
+        }
       }
-      if (!drew) svg += `<rect x="${x}" y="${padT + plotH - 2}" width="${w}" height="2" fill="#ececf0" rx="1" class="bar" data-d="${ds}"/>`;
-      if (days.length <= 10 || i % labelStep === 0 || i === days.length - 1) {
-        svg += `<text class="axis" x="${x + w / 2}" y="${H - 8}" text-anchor="middle">${ds.slice(5)}</text>`;
+      if (!drew) {
+        svg += `<rect x="${x}" y="${padT + plotH - 2}" width="${w}" height="2" fill="#e5e7eb" rx="1" class="bar" data-d="${dd}"/>`;
+      }
+      if (buckets.length <= 10 || i % labelStep === 0 || i === buckets.length - 1) {
+        svg += `<text class="axis" x="${x + w / 2}" y="${H - 7}" text-anchor="middle">${labOf(bk)}</text>`;
       }
     });
-    svg += `<line x1="${padL}" y1="${padT + plotH}" x2="${W - padR}" y2="${padT + plotH}" style="stroke:#dcdce0"/>`;
+
+    svg += `<line x1="${padL}" y1="${padT + plotH}" x2="${W - padR}" y2="${padT + plotH}" style="stroke:#e2e8f0"/>`;
     svg += '</svg>';
     document.getElementById('bars').innerHTML = svg;
   }
-  function renderBarLegend() {
-    document.getElementById('barLegend').innerHTML =
-      [['input', S.nInput], ['output', S.nOutput], ['cacheRead', S.nCacheRead]].map(([k, name]) =>
-        `<span class="it"><span class="sw" style="background:${C[k]}"></span>${name}</span>`).join('');
-  }
-  renderBarLegend();
+
   document.getElementById('bars').addEventListener('mousemove', e => {
     const el = e.target.closest('.bar');
     if (!el) { hideTip(); return; }
-    const ds = el.dataset.d, rec = dayRec(ds); // 跟随模型筛选，与柱子高度的口径一致
+    const ds = el.dataset.d, rec = barRecs[ds];
     if (!rec) { showTip(`<div class="t">${ds}</div>${S.noRecord}`, e.clientX, e.clientY); return; }
+    if (!hasTok) {
+      showTip(`<div class="t">${ds}</div>${S.nEvents}: <b>${fmt(rec.events)}</b>`, e.clientX, e.clientY);
+      return;
+    }
+    const netVal = rec.inputTokens + rec.outputTokens;
     showTip(`<div class="t">${ds} · ${fmt(rec.totalTokens)}</div>` +
-      `<div><span class="sw" style="background:${C.input}"></span>${S.nInput} ${fmtFull(rec.inputTokens)}</div>` +
-      `<div><span class="sw" style="background:${C.output}"></span>${S.nOutput} ${fmtFull(rec.outputTokens)}</div>` +
-      `<div><span class="sw" style="background:${C.cacheRead}"></span>${S.nCacheRead} ${fmtFull(rec.cacheReadTokens)}</div>` +
-      `<div style="margin-top:3px;border-top:1px solid var(--divider);padding-top:3px">${S.estCostTip} ${fmtCost(rec.cost != null ? rec.cost : sum(rec.modelBreakdowns || [], costOf))}</div>`,
+      `<div><span class="sw" style="background:${C.input}"></span>${S.nInput}: <b>${fmt(rec.inputTokens)}</b></div>` +
+      `<div><span class="sw" style="background:${C.output}"></span>${S.nOutput}: <b>${fmt(rec.outputTokens)}</b></div>` +
+      `<div><span class="sw" style="background:${C.cacheRead}"></span>${S.nCacheRead}: <b>${fmt(rec.cacheReadTokens)}</b></div>` +
+      `<div style="margin-top:4px;border-top:1px solid #e2e8f0;padding-top:4px;display:flex;justify-content:space-between;gap:12px;">` +
+      `<span>${S.kpiNet}: <b>${fmt(netVal)}</b></span><span>${S.estCostTip}: <b>${costCell(rec.costUsd, rec.costEst, rec.totalTokens > 0)}</b></span></div>`,
       e.clientX, e.clientY);
   });
   document.getElementById('bars').addEventListener('mouseleave', hideTip);
-  document.getElementById('bars').addEventListener('mousedown', hideTip);
 
-  // ---------- model list（跟随范围） ----------
-  function renderModels(days) {
-    const models = {};
-    days.forEach(d => (d.modelBreakdowns || []).forEach(mb => {
-      const m = models[mb.modelName] = models[mb.modelName] || { input: 0, output: 0, cacheRead: 0, total: 0, cost: 0 };
-      m.input += mb.inputTokens; m.output += mb.outputTokens; m.cacheRead += mb.cacheReadTokens;
-      m.total += mb.inputTokens + mb.outputTokens + mb.cacheReadTokens + (mb.cacheCreationTokens || 0);
-      m.cost += costOf(mb);
-    }));
-    const rows = Object.entries(models).sort((a, b) => b[1].total - a[1].total);
-    document.querySelector('#modelTable tbody').innerHTML = rows.length
-      ? rows.map(([name, m]) =>
-        `<tr><td style="text-align:left;font-weight:620">${esc(name)}</td><td>${fmt(m.input)}</td><td>${fmt(m.output)}</td>` +
-        `<td>${fmt(m.cacheRead)}</td><td><b>${fmt(m.total)}</b></td><td class="dim">≈ ${fmtCost(m.cost)}</td></tr>`).join('')
-      : `<tr><td colspan="6" style="text-align:left" class="dim">${S.noRangeRecords}</td></tr>`;
+  // ---------- Agent table ----------
+  function renderAgents() {
+    // 跟随当前筛选（agent/project/model）聚合 viewRows，与 KPI 同口径
+    const agg = {};
+    for (const r of viewRows) {
+      if (r.date < rangeStart || r.date > rangeEnd) continue;
+      const mbs = selModel === 'all' ? (r.modelBreakdowns || [])
+        : (r.modelBreakdowns || []).filter(mb => modelMatch(mb.modelName));
+      if (selModel !== 'all' && !mbs.length && !r.events) continue;
+      const a = agg[r.agent] = agg[r.agent] || {
+        i: 0, o: 0, cr: 0, cc: 0, tot: 0, cost: 0, hc: false, est: 0, ev: 0, days: new Set(),
+      };
+      a.ev += r.events || 0; a.days.add(r.date);
+      if (selModel === 'all') {
+        a.i += r.inputTokens; a.o += r.outputTokens; a.cr += r.cacheReadTokens;
+        a.cc += r.cacheCreationTokens; a.tot += r.totalTokens;
+        if (r.costUsd != null) { a.cost += r.costUsd; a.hc = true; }
+        if (r.costEst != null) a.est += r.costEst;
+      } else {
+        for (const mb of mbs) {
+          a.i += mb.inputTokens; a.o += mb.outputTokens; a.cr += mb.cacheReadTokens;
+          a.cc += mb.cacheCreationTokens || 0;
+          a.tot += mb.inputTokens + mb.outputTokens + mb.cacheReadTokens + (mb.cacheCreationTokens || 0);
+          if (mb.cost != null) { a.cost += mb.cost; a.hc = true; }
+          if (mb.costEst != null) a.est += mb.costEst;
+        }
+      }
+    }
+    const grand = Object.values(agg).reduce((s, a) => s + a.tot, 0);
+    const sessCount = {};
+    (D.sessions || []).forEach(s => { sessCount[s.agent] = (sessCount[s.agent] || 0) + 1; });
+    const rows = Object.entries(agg).sort((x, y) => (y[1].tot - x[1].tot) || (y[1].ev - x[1].ev));
+    document.querySelector('#agentTable tbody').innerHTML = rows.length
+      ? rows.map(([id, a]) => {
+          const m = AGENTS[id] || {};
+          const pct = grand > 0 ? ((a.tot / grand) * 100).toFixed(1) : '0.0';
+          const isEv = m.hasTokens === false;
+          return `<tr class="ag-row ${agentSel === id ? 'on' : ''}" data-a="${id}">` +
+            `<td style="text-align:left">${agentTag(id)}</td>` +
+            `<td>${isEv ? '—' : `<div class="td-progress"><div class="progress-bg"><div class="progress-bar" style="width:${pct}%"></div></div><span>${pct}%</span></div>`}</td>` +
+            `<td>${a.days.size}</td>` +
+            `<td>${sessCount[id] || 0}</td>` +
+            `<td>${isEv ? '—' : fmt(a.i)}</td><td>${isEv ? '—' : fmt(a.o)}</td>` +
+            `<td>${isEv ? '—' : fmt(a.cr)}</td>` +
+            `<td><b>${isEv ? '—' : fmt(a.tot)}</b></td>` +
+            `<td>${a.ev ? fmt(a.ev) : '—'}</td>` +
+            `<td style="color:var(--dim)">${costCell(a.hc ? a.cost : null, a.est)}</td>` +
+            `</tr>`;
+        }).join('')
+      : `<tr><td colspan="10" style="text-align:left;color:var(--dim)">${S.noRangeRecords}</td></tr>`;
+  }
+  document.getElementById('agentTable').addEventListener('click', e => {
+    const tr = e.target.closest('tr.ag-row');
+    if (!tr) return;
+    agentSel = agentSel === tr.dataset.a ? 'all' : tr.dataset.a;
+    onAgentChange();
+  });
+
+  // ---------- Project distribution ----------
+  // 项目聚合：原生 projectDaily + 无项目行来源的会话级兜底（近似）
+  function aggProjects() {
+    const inRange = d => d >= rangeStart && d <= rangeEnd;
+    const agg = {};
+    const agentsWithProj = new Set(rawProjDaily.map(r => r.agent));
+    for (const r of rawProjDaily) {
+      if (!inRange(r.date)) continue;
+      if (agentSel !== 'all' && r.agent !== agentSel) continue;
+      if (projSel !== 'all' && r.project !== projSel) continue;
+      const p = agg[r.project] = agg[r.project] || { tot: 0, ev: 0, cost: 0, hc: false, est: 0, days: new Set(), agents: new Set(), sess: 0 };
+      p.tot += r.totalTokens; p.ev += r.events || 0;
+      p.days.add(r.date); p.agents.add(r.agent);
+      if (r.costUsd != null) { p.cost += r.costUsd; p.hc = true; }
+      if (r.costEst != null) p.est += r.costEst;
+    }
+    for (const s of D.sessions || []) {
+      if (!s.project) continue;
+      if (agentSel !== 'all' && s.agent !== agentSel) continue;
+      if (projSel !== 'all' && s.project !== projSel) continue;
+      const day = (s.lastActivity || '').slice(0, 10);
+      if (day && !inRange(day)) continue;          // 范围外会话不产生行
+      let p = agg[s.project];
+      if (!p) {
+        if (!day) continue;                        // 无法判断归属范围，不建空行
+        p = agg[s.project] = { tot: 0, ev: 0, cost: 0, hc: false, est: 0, days: new Set(), agents: new Set(), sess: 0 };
+      }
+      p.sess++;
+      p.agents.add(s.agent);
+      if (!agentsWithProj.has(s.agent)) {
+        // ccusage 来源无项目级日粒度，用会话总量近似
+        p.tot += s.totalTokens; p.ev += s.events || 0;
+        if (day) p.days.add(day);
+        if (s.costUsd != null) { p.cost += s.costUsd; p.hc = true; }
+        if (s.costEst != null) p.est += s.costEst;
+      }
+    }
+    return agg;
   }
 
-  // ---------- 范围选择交互 ----------
+  function renderProjects() {
+    const agg = aggProjects();
+    const grand = Object.values(agg).reduce((s, p) => s + p.tot, 0);
+    const rows = Object.entries(agg).sort((a, b) => (b[1].tot - a[1].tot) || (b[1].ev - a[1].ev));
+    document.querySelector('#projTable tbody').innerHTML = rows.length
+      ? rows.map(([name, p]) => {
+          const pct = grand > 0 ? ((p.tot / grand) * 100).toFixed(1) : '0.0';
+          return `<tr class="pj-row ${projSel === name ? 'on' : ''}" data-p="${esc(name)}" style="cursor:pointer">` +
+            `<td style="text-align:left;font-weight:600">${esc(name)}</td>` +
+            `<td>${[...p.agents].map(agentTag).join(' ')}</td>` +
+            `<td><div class="td-progress"><div class="progress-bg"><div class="progress-bar" style="width:${pct}%"></div></div><span>${pct}%</span></div></td>` +
+            `<td>${p.days.size}</td><td>${p.sess}</td>` +
+            `<td><b>${p.tot ? fmt(p.tot) : '—'}</b></td>` +
+            `<td>${p.ev ? fmt(p.ev) : '—'}</td>` +
+            `<td style="color:var(--dim)">${costCell(p.hc ? p.cost : null, p.est)}</td>` +
+            `</tr>`;
+        }).join('')
+      : `<tr><td colspan="8" style="text-align:left;color:var(--dim)">${S.noRangeRecords}</td></tr>`;
+  }
+  document.getElementById('projTable').addEventListener('click', e => {
+    const tr = e.target.closest('tr.pj-row');
+    if (!tr) return;
+    projSel = projSel === tr.dataset.p ? 'all' : tr.dataset.p;
+    onAgentChange();
+  });
+
+  // ---------- Distribution donuts ----------
+  const PALETTE = ['#2563eb', '#22c55e', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#f97316', '#84cc16', '#64748b', '#ef4444'];
+  function donutCard(title, items) {
+    const total = items.reduce((s, x) => s + x.v, 0);
+    if (!total) {
+      return `<div class="donut"><div style="color:var(--dim);font-size:12px">${title} · ${S.noRangeRecords}</div></div>`;
+    }
+    const top = items.slice(0, 5);
+    const rest = items.slice(5);
+    if (rest.length) top.push({ name: S.distOther, v: rest.reduce((s, x) => s + x.v, 0), color: '#cbd5e1' });
+    const R = 34, C = 2 * Math.PI * R;
+    let off = 0, segs = '';
+    for (const it of top) {
+      const len = (it.v / total) * C;
+      segs += `<circle r="${R}" cx="50" cy="50" fill="none" stroke="${it.color}" stroke-width="14" stroke-dasharray="${len} ${C - len}" stroke-dashoffset="${-off}"/>`;
+      off += len;
+    }
+    const lis = top.map(it => {
+      const pct = (it.v / total * 100).toFixed(1);
+      return `<li><span class="dn-name"><span class="dn-dot" style="background:${it.color}"></span>${esc(it.name)}</span>` +
+        `<span class="dn-val">${fmt(it.v)} ${pct}%</span></li>`;
+    }).join('');
+    return `<div class="donut"><svg width="100" height="100" viewBox="0 0 100 100">` +
+      `<g transform="rotate(-90 50 50)">${segs}</g>` +
+      `<text x="50" y="47" text-anchor="middle" font-size="13" font-weight="700">${fmt(total)}</text>` +
+      `<text x="50" y="60" text-anchor="middle" font-size="9" fill="#94a3b8">tokens</text></svg>` +
+      `<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;margin-bottom:4px">${title}</div><ul>${lis}</ul></div></div>`;
+  }
+
+  function renderDist() {
+    const inRange = r => r.date >= rangeStart && r.date <= rangeEnd;
+    // Agent 分布（按 token；活动量来源并入按 events 排序的独立度量没有意义，混排会失真 → 仅 token>0 的行）
+    const byAgent = {};
+    const byModel = {};
+    for (const r of viewRows) {
+      if (!inRange(r) || !r.totalTokens) continue;
+      byAgent[r.agent] = (byAgent[r.agent] || 0) + r.totalTokens;
+      for (const mb of r.modelBreakdowns || []) {
+        if (!modelMatch(mb.modelName)) continue;
+        byModel[mb.modelName] = (byModel[mb.modelName] || 0) +
+          mb.inputTokens + mb.outputTokens + mb.cacheReadTokens + (mb.cacheCreationTokens || 0);
+      }
+    }
+    const agentItems = Object.entries(byAgent).sort((a, b) => b[1] - a[1])
+      .map(([id, v]) => ({ name: agentLabel(id), v, color: agentColor(id) }));
+    const modelItems = Object.entries(byModel).sort((a, b) => b[1] - a[1])
+      .map(([n, v], i) => ({ name: n, v, color: PALETTE[i % PALETTE.length] }));
+    const projAgg = aggProjects();
+    const projItems = Object.entries(projAgg).map(([n, p]) => ({ name: n, v: p.tot }))
+      .filter(x => x.v > 0).sort((a, b) => b.v - a.v)
+      .map((x, i) => ({ ...x, color: PALETTE[i % PALETTE.length] }));
+    document.getElementById('donutRow').innerHTML =
+      donutCard(S.thAgent, agentItems) + donutCard(S.thModel, modelItems) + donutCard(S.thProject, projItems);
+  }
+
+  // ---------- Weekday × hour activity ----------
+  function renderWeekHeat() {
+    const wrap = document.getElementById('wkheatWrap');
+    const grid = Array.from({ length: 7 }, () => new Array(24).fill(0));
+    for (const r of filteredHourly()) {
+      const ds = r.hour.slice(0, 10);
+      if (ds < rangeStart || ds > rangeEnd) continue;
+      const dow = (new Date(ds + 'T00:00:00').getDay() + 6) % 7;  // 周一=0
+      grid[dow][+r.hour.slice(11)] += hasTok ? r.totalTokens : r.events;
+    }
+    const max = Math.max(1, ...grid.flat());
+    wkGrid = grid;
+    if (max === 1) { wrap.style.display = 'none'; return; }
+    wrap.style.display = '';
+    let h = '<div class="wk-lab"></div>';
+    for (let i = 0; i < 24; i++) h += `<div class="wk-hour">${i % 6 === 0 ? i : ''}</div>`;
+    S.weekdays.forEach((w, dow) => {
+      h += `<div class="wk-lab">${w}</div>`;
+      for (let i = 0; i < 24; i++) {
+        const v = grid[dow][i];
+        const lvl = !v ? 0 : Math.min(4, Math.ceil((v / max) * 4));
+        h += `<div class="wk-cell" style="background:${HEAT[lvl]}" data-w="${dow}" data-h="${i}"></div>`;
+      }
+    });
+    document.getElementById('wkheat').innerHTML = h;
+  }
+  document.getElementById('wkheat').addEventListener('mousemove', e => {
+    const el = e.target.closest('.wk-cell');
+    if (!el) { hideTip(); return; }
+    const dow = +el.dataset.w, hh = +el.dataset.h;
+    showTip(`<div class="t">${S.weekdays[dow]} ${hh}:00-${hh + 1}:00</div>${hasTok ? fmt(wkVal(dow, hh)) + ' tokens' : fmt(wkVal(dow, hh)) + ' ' + S.nEvents}`, e.clientX, e.clientY);
+  });
+  document.getElementById('wkheat').addEventListener('mouseleave', hideTip);
+  let wkGrid = null;
+  function wkVal(dow, hh) { return wkGrid ? wkGrid[dow][hh] : 0; }
+
+  // ---------- Hourly detail records ----------
+  let recExpanded = false;
+  document.getElementById('recExpandBtn').addEventListener('click', () => { recExpanded = !recExpanded; renderRecords(); });
+  function renderRecords() {
+    const rows = filteredHourly()
+      .filter(r => r.hour.slice(0, 10) >= rangeStart && r.hour.slice(0, 10) <= rangeEnd)
+      .sort((a, b) => b.hour.localeCompare(a.hour));
+    const show = recExpanded ? rows : rows.slice(0, 10);
+    document.querySelector('#recTable tbody').innerHTML = show.length
+      ? show.map(r =>
+          `<tr><td style="text-align:left;white-space:nowrap">${r.hour.slice(5, 10)} ${r.hour.slice(11)}:00</td>` +
+          `<td>${agentTag(r.agent)}</td>` +
+          `<td style="text-align:left"><span class="model-tag">${esc(r.model)}</span></td>` +
+          `<td style="text-align:left;color:var(--dim)">${esc(r.project || '—')}</td>` +
+          `<td>${r.inputTokens ? fmt(r.inputTokens) : '—'}</td>` +
+          `<td>${r.outputTokens ? fmt(r.outputTokens) : '—'}</td>` +
+          `<td>${r.cacheReadTokens ? fmt(r.cacheReadTokens) : '—'}</td>` +
+          `<td><b>${r.totalTokens ? fmt(r.totalTokens) : '—'}</b></td>` +
+          `<td>${r.events ? fmt(r.events) : '—'}</td>` +
+          `<td style="color:var(--dim)">${costCell(r.costUsd, r.costEst, r.totalTokens > 0)}</td></tr>`
+        ).join('')
+      : `<tr><td colspan="10" style="text-align:left;color:var(--dim)">${S.noRangeRecords}</td></tr>`;
+    const btn = document.getElementById('recExpandBtn');
+    if (rows.length > 10) {
+      btn.style.display = 'inline-block';
+      btn.textContent = recExpanded ? S.showLess : S.showMore.replace('{n}', rows.length);
+    } else {
+      btn.style.display = 'none';
+    }
+  }
+
+  // ---------- Models table ----------
+  function renderModels(days) {
+    const models = {};
+    let grandTotal = 0;
+    days.forEach(d => (d.modelBreakdowns || []).forEach(mb => {
+      const key = modelKeyOf(mb);
+      const m = models[key] = models[key] || { agents: new Set(), name: mb.modelName, input: 0, output: 0, cacheRead: 0, total: 0, cost: 0, costEst: 0 };
+      (mb.agents || [mb.agent]).forEach(a => a && m.agents.add(a));
+      m.input += mb.inputTokens; m.output += mb.outputTokens; m.cacheRead += mb.cacheReadTokens;
+      const tot = mb.inputTokens + mb.outputTokens + mb.cacheReadTokens + (mb.cacheCreationTokens || 0);
+      m.total += tot; grandTotal += tot;
+      m.cost += mb.cost || 0;
+      m.costEst += mb.costEst || 0;
+    }));
+    const rows = Object.entries(models).sort((a, b) => b[1].total - a[1].total);
+    // 按开发商分组：组头行 + 组内按用量排序
+    const groups = {};
+    for (const kv of rows) (groups[devOf(kv[1].name)] = groups[devOf(kv[1].name)] || []).push(kv);
+    const devs = Object.entries(groups)
+      .map(([d, items]) => ({ d, items, tot: items.reduce((s, [, m]) => s + m.total, 0) }))
+      .sort((a, b) => b.tot - a.tot);
+    document.querySelector('#modelTable tbody').innerHTML = devs.length
+      ? devs.map(g =>
+          `<tr class="dev-row"><td colspan="8"><b>${esc(g.d)}</b><span>${fmt(g.tot)}</span></td></tr>` +
+          g.items.map(([key, m]) => {
+            const pct = grandTotal > 0 ? ((m.total / grandTotal) * 100).toFixed(1) : 0;
+            return `<tr>` +
+              `<td style="text-align:left;font-weight:600">${esc(m.name)}</td>` +
+              `<td style="text-align:left">${agentSel === 'all' ? [...m.agents].map(agentTag).join(' ') : ''}</td>` +
+              `<td><div class="td-progress"><div class="progress-bg"><div class="progress-bar" style="width:${pct}%"></div></div><span>${pct}%</span></div></td>` +
+              `<td>${fmt(m.input)}</td><td>${fmt(m.output)}</td><td>${fmt(m.cacheRead)}</td>` +
+              `<td><b>${fmt(m.total)}</b></td><td style="color:var(--dim)">${costCell(m.cost || null, m.costEst, m.total > 0)}</td>` +
+              `</tr>`;
+          }).join('')
+        ).join('')
+      : `<tr><td colspan="8" style="text-align:left;color:var(--dim)">${S.noRangeRecords}</td></tr>`;
+  }
+
+  // ---------- Monthly table ----------
+  function renderMonthly() {
+    const byMonth = {};
+    daily.forEach(d => {
+      const k = d.date.slice(0, 7);
+      const m = byMonth[k] = byMonth[k] || { input: 0, output: 0, cacheRead: 0, total: 0, cost: 0, hc: false, est: 0, ev: 0 };
+      m.input += d.inputTokens; m.output += d.outputTokens; m.cacheRead += d.cacheReadTokens;
+      m.total += d.totalTokens; m.ev += d.events;
+      if (d.costUsd != null) { m.cost += d.costUsd; m.hc = true; }
+      if (d.costEst != null) m.est += d.costEst;
+    });
+    const rows = Object.entries(byMonth);
+    document.querySelector('#monthTable tbody').innerHTML = hasTok
+      ? rows.map(([k, m]) =>
+          `<tr><td style="text-align:left;font-weight:600">${k}</td><td>${fmt(m.input)}</td><td>${fmt(m.output)}</td>` +
+          `<td>${fmt(m.cacheRead)}</td><td><b>${fmt(m.total)}</b></td><td style="color:var(--dim)">${costCell(m.hc ? m.cost : null, m.est)}</td></tr>`
+        ).join('')
+      : rows.map(([k, m]) =>
+          `<tr><td style="text-align:left;font-weight:600">${k}</td><td colspan="4" style="color:var(--dim)">${S.kpiNoToken}</td>` +
+          `<td>${fmt(m.ev)}${S.evUnit}</td></tr>`
+        ).join('');
+  }
+
+  // ---------- Sessions ----------
+  let sessSort = 'total';
+  let sessSearch = '';
+  let sessExpanded = false;
+  const sessSortEl = document.getElementById('sessSort');
+  const sessSearchEl = document.getElementById('sessSearch');
+  const sessExpandBtn = document.getElementById('sessExpandBtn');
+
+  sessSortEl.addEventListener('change', e => { sessSort = e.target.value; renderSessions(); });
+  sessSearchEl.addEventListener('input', e => { sessSearch = e.target.value.trim().toLowerCase(); renderSessions(); });
+  sessExpandBtn.addEventListener('click', () => { sessExpanded = !sessExpanded; renderSessions(); });
+
+  function renderSessions() {
+    let list = (D.sessions || []).slice();
+    if (agentSel !== 'all') list = list.filter(s => s.agent === agentSel);
+    if (selModel !== 'all') list = list.filter(s => (s.modelsUsed || []).some(modelMatch));
+    if (projSel !== 'all') list = list.filter(s => s.project === projSel);
+    if (sessSearch) {
+      list = list.filter(s => s.sessionId.toLowerCase().includes(sessSearch) ||
+        (s.project || '').toLowerCase().includes(sessSearch) ||
+        s.agent.toLowerCase().includes(sessSearch) ||
+        agentLabel(s.agent).toLowerCase().includes(sessSearch) ||
+        (s.modelsUsed || []).some(m => m.toLowerCase().includes(sessSearch)));
+    }
+    if (sessSort === 'cost') {
+      list.sort((a, b) => (b.costUsd ?? b.costEst ?? 0) - (a.costUsd ?? a.costEst ?? 0));
+    } else if (sessSort === 'net') {
+      list.sort((a, b) => (b.inputTokens + b.outputTokens) - (a.inputTokens + a.outputTokens));
+    } else {
+      list.sort((a, b) => (b.totalTokens - a.totalTokens) || ((b.events || 0) - (a.events || 0)));
+    }
+
+    const totalCount = list.length;
+    const displayList = sessExpanded ? list : list.slice(0, 8);
+    const tbody = document.querySelector('#sessionTable tbody');
+    if (!displayList.length) {
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align:left;color:var(--dim);padding:14px 10px;">${S.noSessionsFound}</td></tr>`;
+      sessExpandBtn.style.display = 'none';
+      return;
+    }
+
+    tbody.innerHTML = displayList.map(s => {
+      const shortId = s.sessionId.replace(/^session_/, '').slice(0, 10);
+      const net = s.inputTokens + s.outputTokens;
+      const tot = s.totalTokens || 1;
+      const pIn = Math.round((s.inputTokens / tot) * 100);
+      const pOut = Math.round((s.outputTokens / tot) * 100);
+      const pCr = Math.max(0, 100 - pIn - pOut);
+      const modelsHtml = (s.modelsUsed || []).map(m => `<span class="model-tag">${esc(m)}</span>`).join('');
+      const isEv = !s.totalTokens;
+      return `<tr>` +
+        `<td style="text-align:left">` +
+          `<span class="sess-id" title="${esc(s.sessionId)}">${esc(shortId)}…</span>` +
+          `<button class="btn-copy" data-id="${esc(s.sessionId)}">${S.copyBtn}</button>` +
+          (s.project ? `<span class="sess-proj">${esc(s.project)}</span>` : '') +
+        `</td>` +
+        `<td>${agentTag(s.agent)}</td>` +
+        `<td style="text-align:left">${modelsHtml}</td>` +
+        `<td>${isEv ? `<span class="ev-tag">${fmt(s.events || 0)}${S.evUnit}</span>` :
+          `<div class="mini-bar" title="In:${pIn}% Out:${pOut}% Cache:${pCr}%">` +
+          `<span style="width:${pIn}%;background:${C.input}"></span>` +
+          `<span style="width:${pOut}%;background:${C.output}"></span>` +
+          `<span style="width:${pCr}%;background:${C.cacheRead}"></span></div>`}</td>` +
+        `<td>${isEv ? '—' : fmt(net)}</td>` +
+        `<td>${isEv ? '—' : fmt(s.cacheReadTokens)}</td>` +
+        `<td><b>${isEv ? '—' : fmt(s.totalTokens)}</b></td>` +
+        `<td style="color:var(--dim)">${costCell(s.costUsd, s.costEst, s.totalTokens > 0)}</td>` +
+        `</tr>`;
+    }).join('');
+
+    if (totalCount > 8) {
+      sessExpandBtn.style.display = 'inline-block';
+      sessExpandBtn.textContent = sessExpanded ? S.showLess : S.showMore.replace('{n}', totalCount);
+    } else {
+      sessExpandBtn.style.display = 'none';
+    }
+  }
+
+  document.getElementById('sessionTable').addEventListener('click', e => {
+    const b = e.target.closest('.btn-copy');
+    if (!b) return;
+    const id = b.dataset.id;
+    navigator.clipboard.writeText(id).then(() => showToast(S.copied)).catch(() => prompt('Copy Session ID:', id));
+  });
+
+  // ---------- Collect warnings ----------
+  function renderWarnings() {
+    const w = D.warnings || [];
+    document.getElementById('warnBar').innerHTML = w.length
+      ? `<div class="warn-bar">${w.map(esc).join('<br>')}</div>` : '';
+  }
+
+  // ---------- Sources table ----------
+  function renderSources() {
+    document.querySelector('#srcTable tbody').innerHTML = D.agents.map(a => {
+      const note = !a.hasTokens ? S.noteEventsOnly : (a.hasCost ? S.noteTokenOk : S.noteTokenOnly);
+      return `<tr>` +
+        `<td style="text-align:left">${agentTag(a.id)}</td>` +
+        `<td class="src-path" style="text-align:left">${esc(a.source || '')}</td>` +
+        `<td><span class="yn ${a.hasTokens ? 'y' : 'n'}">${a.hasTokens ? '✓' : '—'}</span></td>` +
+        `<td><span class="yn ${a.hasCost ? 'y' : 'n'}">${a.hasCost ? '✓' : '—'}</span></td>` +
+        `<td style="text-align:left;color:var(--dim)">${note}</td></tr>`;
+    }).join('');
+  }
+
+  // ---------- Range render ----------
+  function renderRange() {
+    updateMode();
+    renderHeatTitle();
+    renderHeat();
+    const days = daily.filter(d => d.date >= rangeStart && d.date <= rangeEnd);
+    const spanDays = dayNum(rangeEnd) - dayNum(rangeStart) + 1;
+    document.getElementById('rangeLabel').textContent = `${S.rangeLabel}${rangeStart} ~ ${rangeEnd}`;
+    document.getElementById('barRange').textContent = `${rangeStart} ~ ${rangeEnd}`;
+    document.getElementById('agentRange').textContent = `${rangeStart} ~ ${rangeEnd}`;
+    renderHero(days, spanDays);
+    renderBars();
+    renderDist();
+    renderAgents();
+    renderModels(days);
+    renderProjects();
+    renderWeekHeat();
+    renderRecords();
+    syncUrl();
+  }
+
+  // ---------- Agent change ----------
+  function onAgentChange() {
+    rebuildView();
+    computeStreak();
+    computeMaxes();
+    if (renderAgentBar()) {           // 有筛选项被重置（如失效的 URL 参数）→ 重建视图
+      rebuildView(); computeStreak(); computeMaxes();
+    }
+    updateMode();
+    renderHeatTitle();
+    renderHeat();
+    renderBarLegend();
+    renderMonthly();
+    renderSessions();
+    renderRange();
+  }
+
+  // ---------- Custom Datepicker ----------
   const presetTabs = document.getElementById('presetTabs');
   const dStart = document.getElementById('dStart');
   const dEnd = document.getElementById('dEnd');
 
-  // 自绘圆角日历弹层（原生 date 控件的弹层无法改样式）
   function attachDatePicker(input) {
     let pop = null, viewY, viewM;
     const pad = n => String(n).padStart(2, '0');
@@ -819,13 +2053,12 @@
       close();
     }
     function render() {
-      const firstWd = (new Date(viewY, viewM, 1).getDay() + 6) % 7; // 周一开头
+      const firstWd = (new Date(viewY, viewM, 1).getDay() + 6) % 7;
       const daysIn = new Date(viewY, viewM + 1, 0).getDate();
-      const title = lang === 'en' ? `${S.months[viewM]} ${viewY}` : `${viewY}年${pad(viewM + 1)}月`;
+      const title = lang === 'en' ? `${(S.months ? S.months[viewM] : viewM + 1)} ${viewY}` : `${viewY}年${pad(viewM + 1)}月`;
       let h = `<div class="dp-head"><button data-a="-1">‹</button>` +
         `<span class="t">${title}</span><button data-a="1">›</button></div>`;
-      h += '<div class="dp-grid">' + S.weekdays
-        .map(w => `<span class="wd">${w}</span>`).join('');
+      h += '<div class="dp-grid">' + S.weekdays.map(w => `<span class="wd">${w}</span>`).join('');
       for (let i = 0; i < firstWd; i++) h += '<span></span>';
       for (let d = 1; d <= daysIn; d++) {
         const ds = `${viewY}-${pad(viewM + 1)}-${pad(d)}`;
@@ -844,7 +2077,9 @@
   attachDatePicker(dEnd);
 
   function setPreset(btn) {
-    document.querySelectorAll('#presetTabs button').forEach(x => x.classList.toggle('on', x === btn));
+    document.querySelectorAll('#presetTabs button').forEach(x => {
+      x.classList.toggle('on', x === btn); x.setAttribute('aria-pressed', x === btn);
+    });
   }
   function applyPreset(p) {
     if (p === 'all') { rangeStart = firstDate; rangeEnd = todayStr; }
@@ -873,29 +2108,25 @@
     if (b > todayStr) b = todayStr;
     rangeStart = a; rangeEnd = b;
     activePreset = null;
-    document.querySelectorAll('#presetTabs button').forEach(x => x.classList.remove('on'));
+    document.querySelectorAll('#presetTabs button').forEach(x => { x.classList.remove('on'); x.setAttribute('aria-pressed', 'false'); });
     renderRange();
   });
 
-  // ---------- monthly（全时间段，从 daily 重算，成本用官方 API 价） ----------
-  const byMonth = {};
-  daily.forEach(d => {
-    const k = d.date.slice(0, 7);
-    const m = byMonth[k] = byMonth[k] || { input: 0, output: 0, cacheRead: 0, total: 0, cost: 0 };
-    m.input += d.inputTokens; m.output += d.outputTokens; m.cacheRead += d.cacheReadTokens;
-    m.total += d.totalTokens;
-    m.cost += sum(d.modelBreakdowns || [], costOf);
-  });
-  document.querySelector('#monthTable tbody').innerHTML = Object.entries(byMonth).map(([k, m]) =>
-    `<tr><td>${k}</td><td>${fmtFull(m.input)}</td><td>${fmtFull(m.output)}</td>` +
-    `<td>${fmtFull(m.cacheRead)}</td><td><b>${fmtFull(m.total)}</b></td><td class="dim">${fmtCost(m.cost)}</td></tr>`
-  ).join('');
+  // ---------- Init ----------
+  rebuildView();
+  computeStreak();
+  computeMaxes();
+  {
+    const d0 = new Date(today); d0.setDate(d0.getDate() - 6);
+    rangeStart = iso(d0) < firstDate ? firstDate : iso(d0);
+  }
 
-  // 初始渲染：URL 带范围参数（刷新时写入的）则恢复用户选择，否则默认近 7 日
   {
     const q = new URLSearchParams(location.search);
-    const p = q.get('p'), s = q.get('s'), e = q.get('e');
-    // 校验格式 + 真实日期（拒绝 2026-02-30 这类会被 Date 回退的非法值）
+    const p = q.get('p'), s = q.get('s'), e = q.get('e'), a = q.get('a');
+    if (a && AGENTS[a]) agentSel = a;
+    if (q.get('m')) selModel = q.get('m');
+    if (q.get('pj')) projSel = q.get('pj');
     const validISO = ds => {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(ds)) return false;
       const [y, m, d] = ds.split('-').map(Number);
@@ -905,33 +2136,50 @@
     if (p && ['today', '7', '14', '30', 'all'].includes(p)) {
       applyPreset(p);
     } else if (s && e && validISO(s) && validISO(e)) {
-      let a = s < e ? s : e, b = s < e ? e : s;
-      if (a < firstDate) a = firstDate;
-      if (b > todayStr) b = todayStr;
-      rangeStart = a; rangeEnd = b;
+      let x = s < e ? s : e, y = s < e ? e : s;
+      if (x < firstDate) x = firstDate;
+      if (y > todayStr) y = todayStr;
+      rangeStart = x; rangeEnd = y;
       activePreset = null;
-      dStart.value = a; dEnd.value = b;
-      document.querySelectorAll('#presetTabs button').forEach(x => x.classList.remove('on'));
+      dStart.value = x; dEnd.value = y;
+      document.querySelectorAll('#presetTabs button').forEach(b => { b.classList.remove('on'); b.setAttribute('aria-pressed', 'false'); });
+    }
+    if (agentSel !== 'all' || selModel !== 'all' || projSel !== 'all') {
+      rebuildView(); computeStreak(); computeMaxes();
     }
   }
+
+  if (renderAgentBar()) { rebuildView(); computeStreak(); computeMaxes(); }
+  updateMode();
+  renderWarnings();
+  renderHeatTitle();
+  renderHeat();
+  renderBarLegend();
+  renderMonthly();
+  renderSessions();
+  renderSources();
   renderRange();
 
-  // ---------- 语言切换 ----------
+  // ---------- Language Switch ----------
   document.getElementById('langBtn').addEventListener('click', () => {
     lang = lang === 'zh' ? 'en' : 'zh';
     S = I18N[lang];
-    localStorage.setItem('kimi-dash-lang', lang);
+    localStorage.setItem('agent-dash-lang', lang);
     applyStatic();
     renderGen();
-    renderPrice();
+    renderAgentBar();
     renderHeatTitle();
     renderHeat();
-    rebuildBarSel();
     renderBarLegend();
-    renderRange(); // 内部会调 renderBars / renderModels
+    renderMonthly();
+    renderSessions();
+    renderSources();
+    document.getElementById('dailyHint').textContent = hasTok ? S.dailyHint : S.dailyHintE;
+    document.getElementById('kpiTotalTitle').textContent = hasTok ? S.kpiTotal : S.kpiEvents;
+    renderRange();
   });
 
-  // ---------- 刷新按钮 ----------
+  // ---------- Refresh Button ----------
   const refreshBtn = document.getElementById('refreshBtn');
   refreshBtn.addEventListener('click', async () => {
     refreshBtn.disabled = true;
@@ -940,17 +2188,13 @@
       const r = await fetch('/refresh', { method: 'POST' });
       const body = await r.json();
       if (body.ok) {
-        // 把当前选中的时间范围写进 URL，刷新后恢复同一视图（直接进页面无参数则回到默认近 7 日）
-        const q = new URLSearchParams(location.search);
-        q.delete('p'); q.delete('s'); q.delete('e');
-        if (activePreset) q.set('p', activePreset);
-        else { q.set('s', rangeStart); q.set('e', rangeEnd); }
-        location.search = q.toString();
+        showToast(lang === 'zh' ? '数据刷新成功' : 'Data refreshed');
+        setTimeout(() => location.reload(), 400);
         return;
       }
-      alert(S.refreshFail + (body.log || '?'));
+      showToast(S.refreshFail + (body.log || '?'), true);
     } catch (e) {
-      alert(S.noServer);
+      showToast(S.noServer, true);
     }
     refreshBtn.disabled = false;
     refreshBtn.textContent = S.refresh;

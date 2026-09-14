@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Kimi Code 用量仪表盘本地服务：托管页面 + /refresh 接口（调用 refresh.sh 重建 data.js）"""
+"""全 Agent 用量仪表盘本地服务：托管页面 + /refresh 接口（调用 refresh.sh 重建 data.js）"""
 import json
 import subprocess
 import threading

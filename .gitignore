@@ -3,3 +3,5 @@ data.js
 .refresh.lock/
 __pycache__/
 .DS_Store
+.cache/
+.serena/
