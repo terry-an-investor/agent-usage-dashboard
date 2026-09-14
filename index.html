@@ -583,6 +583,9 @@
       </thead>
       <tbody></tbody>
     </table></div>
+    <div class="expand-row" id="projExpandRow">
+      <button class="btn-expand" id="projExpandBtn" data-i18n="showMore">展开更多</button>
+    </div>
   </div>
 
   <!-- Session Explorer -->
@@ -590,7 +593,7 @@
     <div class="card-head">
       <div>
         <h2 data-i18n="sessionTitle">会话明细 (Session Explorer)</h2>
-        <div class="hint" data-i18n="sessionHint">按消耗排序的高用量会话 · 点击 ID 即可复制</div>
+        <div class="hint" id="sessHint" data-i18n="sessionHint">按消耗排序的高用量会话 · 点击 ID 即可复制</div>
       </div>
       <div class="head-right sess-ctrls">
         <input type="text" id="sessSearch" class="sess-search" data-i18n-ph="sessionSearchPh" placeholder="搜索 Session ID..." aria-label="Search sessions">
@@ -737,6 +740,7 @@
 
       sessionTitle: '会话明细 (Session Explorer)',
       sessionHint: '按消耗排序的高用量会话 · 点击 ID 即可复制',
+      sessionModelNote: '已按模型筛选：总计为会话级全模型用量，非单模型口径',
       sessionSearchPh: '搜索会话 / 模型 / Agent...',
       sortTotal: '按总 Token 排序', sortCost: '按估算成本排序', sortNet: '按净生成量排序',
       thSessionId: '会话 ID', thModels: '模型', thBreakdown: '构成', thNet: '净生成',
@@ -813,6 +817,7 @@
 
       sessionTitle: 'Session Explorer',
       sessionHint: 'Detailed session logs · Click ID to copy',
+      sessionModelNote: 'Model filter on: totals are whole-session usage, not per-model',
       sessionSearchPh: 'Search session / model / agent...',
       sortTotal: 'Sort by Total Tokens', sortCost: 'Sort by Est. Cost', sortNet: 'Sort by Net Output',
       thSessionId: 'Session ID', thModels: 'Models', thBreakdown: 'Mix', thNet: 'Net Tokens',
@@ -897,7 +902,7 @@
   const fmtCostOr = c => c == null ? '—' : fmtCost(c);
   // 记账成本与价目估算的统一渲染：$x = 来源记账；≈$x = models.dev 价目估算；未定价 = 无可用价目
   const costCell = (rec, est, hasTok) => rec != null ? fmtCost(rec)
-    : (est ? `<span class="est-cost" title="${S.estCostSrc}">≈${fmtCost(est)}</span>`
+    : (est != null ? `<span class="est-cost" title="${S.estCostSrc}">≈${fmtCost(est)}</span>`
            : (hasTok ? `<span class="unpriced">${S.unpriced}</span>` : '—'));
 
   const AGENTS = Object.fromEntries((D.agents || []).map(a => [a.id, a]));
@@ -966,7 +971,7 @@
     for (const r of src) {
       const mbs = selModel === 'all' ? (r.modelBreakdowns || [])
         : (r.modelBreakdowns || []).filter(mb => modelMatch(mb.modelName));
-      if (selModel !== 'all' && !mbs.length && !r.events) continue;
+      if (selModel !== 'all' && !mbs.length) continue;
       let d = map[r.date];
       if (!d) {
         d = map[r.date] = {
@@ -984,7 +989,7 @@
         let mc = null, mce = null;
         for (const mb of mbs) {
           d.inputTokens += mb.inputTokens; d.outputTokens += mb.outputTokens;
-          d.cacheReadTokens += mb.cacheReadTokens; d.cacheCreationTokens += mb.cacheCreationTokens;
+          d.cacheReadTokens += mb.cacheReadTokens; d.cacheCreationTokens += mb.cacheCreationTokens || 0;
           d.totalTokens += mb.inputTokens + mb.outputTokens + mb.cacheReadTokens + (mb.cacheCreationTokens || 0);
           if (mb.cost != null) mc = (mc || 0) + mb.cost;
           if (mb.costEst != null) mce = (mce || 0) + mb.costEst;
@@ -997,13 +1002,14 @@
         const key = mb.modelName;   // 同名模型跨 agent 合并，agent 记进集合
         const m = d._m[key] = d._m[key] || {
           modelName: mb.modelName, agents: new Set(),
-          inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, cost: 0, costEst: 0,
+          inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0,
+          cost: 0, costEst: 0, hc: false, he: false,
         };
         m.agents.add(r.agent);
         m.inputTokens += mb.inputTokens; m.outputTokens += mb.outputTokens;
-        m.cacheReadTokens += mb.cacheReadTokens; m.cacheCreationTokens += mb.cacheCreationTokens;
-        m.cost += mb.cost || 0;
-        m.costEst += mb.costEst || 0;
+        m.cacheReadTokens += mb.cacheReadTokens; m.cacheCreationTokens += mb.cacheCreationTokens || 0;
+        if (mb.hasCost) { m.cost += mb.cost || 0; m.hc = true; }
+        if (mb.costEst != null) { m.costEst += mb.costEst; m.he = true; }
       }
     }
     daily = Object.values(map).sort((a, b) => a.date < b.date ? -1 : 1)
@@ -1052,9 +1058,10 @@
   ];
   const devOf = m => (D.modelDevs || {})[m] ||
     (DEV_RULES.find(r => r[0].test(m)) || [0, S.devOther])[1];
-  // selModel 可为 'all'、模型名或 'dev:<开发商>'（整组筛选）
-  const modelMatch = m => selModel === 'all' || m === selModel ||
-    (selModel.startsWith('dev:') && devOf(m) === selModel.slice(4));
+  // selModel 可为 'all'、模型名或 'dev:<开发商>'（整组筛选）；'?' 表示来源无模型信息，不匹配任何具体筛选
+  const modelMatch = m => selModel === 'all' ||
+    (!!m && m !== '?' &&
+      (m === selModel || (selModel.startsWith('dev:') && devOf(m) === selModel.slice(4))));
 
   // ---------- Filter selectors (Agent / Model / Project) ----------
   const agentSelEl = document.getElementById('agentSel');
@@ -1133,9 +1140,13 @@
       agentSel = 'all'; agentSelEl.value = 'all'; reset = true;
     }
 
+    // 模型列表只跟随 agent 维度：选项目不应使已选模型"失效"而被静默重置
     const mTot = {};
-    for (const r of viewRows) for (const mb of r.modelBreakdowns || [])
-      mTot[mb.modelName] = (mTot[mb.modelName] || 0) + mb.inputTokens + mb.outputTokens + mb.cacheReadTokens + (mb.cacheCreationTokens || 0);
+    for (const r of rawDaily) {
+      if (agentSel !== 'all' && r.agent !== agentSel) continue;
+      for (const mb of r.modelBreakdowns || [])
+        mTot[mb.modelName] = (mTot[mb.modelName] || 0) + mb.inputTokens + mb.outputTokens + mb.cacheReadTokens + (mb.cacheCreationTokens || 0);
+    }
     // 模型下拉：树形（开发商 → 模型，默认折叠）
     const byDev = {};
     for (const n of Object.keys(mTot)) (byDev[devOf(n)] = byDev[devOf(n)] || []).push(n);
@@ -1565,29 +1576,36 @@
       if (r.date < rangeStart || r.date > rangeEnd) continue;
       const mbs = selModel === 'all' ? (r.modelBreakdowns || [])
         : (r.modelBreakdowns || []).filter(mb => modelMatch(mb.modelName));
-      if (selModel !== 'all' && !mbs.length && !r.events) continue;
+      if (selModel !== 'all' && !mbs.length) continue;
       const a = agg[r.agent] = agg[r.agent] || {
-        i: 0, o: 0, cr: 0, cc: 0, tot: 0, cost: 0, hc: false, est: 0, ev: 0, days: new Set(),
+        i: 0, o: 0, cr: 0, cc: 0, tot: 0, cost: 0, hc: false, est: 0, he: false, ev: 0, days: new Set(),
       };
       a.ev += r.events || 0; a.days.add(r.date);
       if (selModel === 'all') {
         a.i += r.inputTokens; a.o += r.outputTokens; a.cr += r.cacheReadTokens;
         a.cc += r.cacheCreationTokens; a.tot += r.totalTokens;
         if (r.costUsd != null) { a.cost += r.costUsd; a.hc = true; }
-        if (r.costEst != null) a.est += r.costEst;
+        if (r.costEst != null) { a.est += r.costEst; a.he = true; }
       } else {
         for (const mb of mbs) {
           a.i += mb.inputTokens; a.o += mb.outputTokens; a.cr += mb.cacheReadTokens;
           a.cc += mb.cacheCreationTokens || 0;
           a.tot += mb.inputTokens + mb.outputTokens + mb.cacheReadTokens + (mb.cacheCreationTokens || 0);
-          if (mb.cost != null) { a.cost += mb.cost; a.hc = true; }
-          if (mb.costEst != null) a.est += mb.costEst;
+          if (mb.hasCost) { a.cost += mb.cost || 0; a.hc = true; }
+          if (mb.costEst != null) { a.est += mb.costEst; a.he = true; }
         }
       }
     }
     const grand = Object.values(agg).reduce((s, a) => s + a.tot, 0);
+    // 会话计数跟随当前筛选（范围 / 模型 / 项目），与同行 token 数字同口径
     const sessCount = {};
-    (D.sessions || []).forEach(s => { sessCount[s.agent] = (sessCount[s.agent] || 0) + 1; });
+    (D.sessions || []).forEach(s => {
+      const day = (s.lastActivity || '').slice(0, 10);
+      if (day && (day < rangeStart || day > rangeEnd)) return;
+      if (projSel !== 'all' && s.project !== projSel) return;
+      if (selModel !== 'all' && !(s.modelsUsed || []).some(modelMatch)) return;
+      sessCount[s.agent] = (sessCount[s.agent] || 0) + 1;
+    });
     const rows = Object.entries(agg).sort((x, y) => (y[1].tot - x[1].tot) || (y[1].ev - x[1].ev));
     document.querySelector('#agentTable tbody').innerHTML = rows.length
       ? rows.map(([id, a]) => {
@@ -1603,7 +1621,7 @@
             `<td>${isEv ? '—' : fmt(a.cr)}</td>` +
             `<td><b>${isEv ? '—' : fmt(a.tot)}</b></td>` +
             `<td>${a.ev ? fmt(a.ev) : '—'}</td>` +
-            `<td style="color:var(--dim)">${costCell(a.hc ? a.cost : null, a.est)}</td>` +
+            `<td style="color:var(--dim)">${costCell(a.hc ? a.cost : null, a.he ? a.est : null)}</td>` +
             `</tr>`;
         }).join('')
       : `<tr><td colspan="10" style="text-align:left;color:var(--dim)">${S.noRangeRecords}</td></tr>`;
@@ -1625,42 +1643,61 @@
       if (!inRange(r.date)) continue;
       if (agentSel !== 'all' && r.agent !== agentSel) continue;
       if (projSel !== 'all' && r.project !== projSel) continue;
-      const p = agg[r.project] = agg[r.project] || { tot: 0, ev: 0, cost: 0, hc: false, est: 0, days: new Set(), agents: new Set(), sess: 0 };
-      p.tot += r.totalTokens; p.ev += r.events || 0;
+      const mbs = selModel === 'all' ? (r.modelBreakdowns || [])
+        : (r.modelBreakdowns || []).filter(mb => modelMatch(mb.modelName));
+      if (selModel !== 'all' && !mbs.length) continue;
+      const p = agg[r.project] = agg[r.project] || { tot: 0, ev: 0, cost: 0, hc: false, est: 0, he: false, days: new Set(), agents: new Set(), sess: 0 };
+      p.ev += r.events || 0;
       p.days.add(r.date); p.agents.add(r.agent);
-      if (r.costUsd != null) { p.cost += r.costUsd; p.hc = true; }
-      if (r.costEst != null) p.est += r.costEst;
+      if (selModel === 'all') {
+        p.tot += r.totalTokens;
+        if (r.costUsd != null) { p.cost += r.costUsd; p.hc = true; }
+        if (r.costEst != null) { p.est += r.costEst; p.he = true; }
+      } else {
+        for (const mb of mbs) {
+          p.tot += mb.inputTokens + mb.outputTokens + mb.cacheReadTokens + (mb.cacheCreationTokens || 0);
+          if (mb.hasCost) { p.cost += mb.cost || 0; p.hc = true; }
+          if (mb.costEst != null) { p.est += mb.costEst; p.he = true; }
+        }
+      }
     }
     for (const s of D.sessions || []) {
       if (!s.project) continue;
       if (agentSel !== 'all' && s.agent !== agentSel) continue;
       if (projSel !== 'all' && s.project !== projSel) continue;
+      if (selModel !== 'all' && !(s.modelsUsed || []).some(modelMatch)) continue;
       const day = (s.lastActivity || '').slice(0, 10);
       if (day && !inRange(day)) continue;          // 范围外会话不产生行
       let p = agg[s.project];
       if (!p) {
         if (!day) continue;                        // 无法判断归属范围，不建空行
-        p = agg[s.project] = { tot: 0, ev: 0, cost: 0, hc: false, est: 0, days: new Set(), agents: new Set(), sess: 0 };
+        p = agg[s.project] = { tot: 0, ev: 0, cost: 0, hc: false, est: 0, he: false, days: new Set(), agents: new Set(), sess: 0 };
       }
       p.sess++;
       p.agents.add(s.agent);
       if (!agentsWithProj.has(s.agent)) {
-        // ccusage 来源无项目级日粒度，用会话总量近似
-        p.tot += s.totalTokens; p.ev += s.events || 0;
-        if (day) p.days.add(day);
-        if (s.costUsd != null) { p.cost += s.costUsd; p.hc = true; }
-        if (s.costEst != null) p.est += s.costEst;
+        // ccusage 来源无项目级日粒度，用会话总量近似；模型筛选下仅当会话全部模型都命中才归属
+        // （多模型会话无法拆出单模型份额，宁可不计也不虚高）
+        if (selModel === 'all' || (s.modelsUsed || []).every(modelMatch)) {
+          p.tot += s.totalTokens; p.ev += s.events || 0;
+          if (day) p.days.add(day);
+          if (s.costUsd != null) { p.cost += s.costUsd; p.hc = true; }
+          if (s.costEst != null) { p.est += s.costEst; p.he = true; }
+        }
       }
     }
     return agg;
   }
 
+  let projExpanded = false;
+  document.getElementById('projExpandBtn').addEventListener('click', () => { projExpanded = !projExpanded; renderProjects(); });
   function renderProjects() {
     const agg = aggProjects();
     const grand = Object.values(agg).reduce((s, p) => s + p.tot, 0);
     const rows = Object.entries(agg).sort((a, b) => (b[1].tot - a[1].tot) || (b[1].ev - a[1].ev));
-    document.querySelector('#projTable tbody').innerHTML = rows.length
-      ? rows.map(([name, p]) => {
+    const show = projExpanded ? rows : rows.slice(0, 10);
+    document.querySelector('#projTable tbody').innerHTML = show.length
+      ? show.map(([name, p]) => {
           const pct = grand > 0 ? ((p.tot / grand) * 100).toFixed(1) : '0.0';
           return `<tr class="pj-row ${projSel === name ? 'on' : ''}" data-p="${esc(name)}" style="cursor:pointer">` +
             `<td style="text-align:left;font-weight:600">${esc(name)}</td>` +
@@ -1669,10 +1706,17 @@
             `<td>${p.days.size}</td><td>${p.sess}</td>` +
             `<td><b>${p.tot ? fmt(p.tot) : '—'}</b></td>` +
             `<td>${p.ev ? fmt(p.ev) : '—'}</td>` +
-            `<td style="color:var(--dim)">${costCell(p.hc ? p.cost : null, p.est)}</td>` +
+            `<td style="color:var(--dim)">${costCell(p.hc ? p.cost : null, p.he ? p.est : null)}</td>` +
             `</tr>`;
         }).join('')
       : `<tr><td colspan="8" style="text-align:left;color:var(--dim)">${S.noRangeRecords}</td></tr>`;
+    const pBtn = document.getElementById('projExpandBtn');
+    if (rows.length > 10) {
+      pBtn.style.display = 'inline-block';
+      pBtn.textContent = projExpanded ? S.showLess : S.showMore.replace('{n}', rows.length);
+    } else {
+      pBtn.style.display = 'none';
+    }
   }
   document.getElementById('projTable').addEventListener('click', e => {
     const tr = e.target.closest('tr.pj-row');
@@ -1715,13 +1759,16 @@
     // Agent 分布（按 token；活动量来源并入按 events 排序的独立度量没有意义，混排会失真 → 仅 token>0 的行）
     const byAgent = {};
     const byModel = {};
+    const mbTok = mb => mb.inputTokens + mb.outputTokens + mb.cacheReadTokens + (mb.cacheCreationTokens || 0);
     for (const r of viewRows) {
       if (!inRange(r) || !r.totalTokens) continue;
-      byAgent[r.agent] = (byAgent[r.agent] || 0) + r.totalTokens;
-      for (const mb of r.modelBreakdowns || []) {
-        if (!modelMatch(mb.modelName)) continue;
-        byModel[mb.modelName] = (byModel[mb.modelName] || 0) +
-          mb.inputTokens + mb.outputTokens + mb.cacheReadTokens + (mb.cacheCreationTokens || 0);
+      const mbs = selModel === 'all' ? (r.modelBreakdowns || [])
+        : (r.modelBreakdowns || []).filter(mb => modelMatch(mb.modelName));
+      if (selModel !== 'all' && !mbs.length) continue;
+      byAgent[r.agent] = (byAgent[r.agent] || 0) +
+        (selModel === 'all' ? r.totalTokens : mbs.reduce((s, mb) => s + mbTok(mb), 0));
+      for (const mb of mbs) {
+        byModel[mb.modelName] = (byModel[mb.modelName] || 0) + mbTok(mb);
       }
     }
     const agentItems = Object.entries(byAgent).sort((a, b) => b[1] - a[1])
@@ -1784,7 +1831,7 @@
       ? show.map(r =>
           `<tr><td style="text-align:left;white-space:nowrap">${r.hour.slice(5, 10)} ${r.hour.slice(11)}:00</td>` +
           `<td>${agentTag(r.agent)}</td>` +
-          `<td style="text-align:left"><span class="model-tag">${esc(r.model)}</span></td>` +
+          `<td style="text-align:left">${r.model === '?' ? '—' : `<span class="model-tag">${esc(r.model)}</span>`}</td>` +
           `<td style="text-align:left;color:var(--dim)">${esc(r.project || '—')}</td>` +
           `<td>${r.inputTokens ? fmt(r.inputTokens) : '—'}</td>` +
           `<td>${r.outputTokens ? fmt(r.outputTokens) : '—'}</td>` +
@@ -1809,13 +1856,13 @@
     let grandTotal = 0;
     days.forEach(d => (d.modelBreakdowns || []).forEach(mb => {
       const key = modelKeyOf(mb);
-      const m = models[key] = models[key] || { agents: new Set(), name: mb.modelName, input: 0, output: 0, cacheRead: 0, total: 0, cost: 0, costEst: 0 };
+      const m = models[key] = models[key] || { agents: new Set(), name: mb.modelName, input: 0, output: 0, cacheRead: 0, total: 0, cost: 0, costEst: 0, hc: false, he: false };
       (mb.agents || [mb.agent]).forEach(a => a && m.agents.add(a));
       m.input += mb.inputTokens; m.output += mb.outputTokens; m.cacheRead += mb.cacheReadTokens;
       const tot = mb.inputTokens + mb.outputTokens + mb.cacheReadTokens + (mb.cacheCreationTokens || 0);
       m.total += tot; grandTotal += tot;
-      m.cost += mb.cost || 0;
-      m.costEst += mb.costEst || 0;
+      if (mb.hasCost) { m.cost += mb.cost || 0; m.hc = true; }
+      if (mb.costEst != null) { m.costEst += mb.costEst; m.he = true; }
     }));
     const rows = Object.entries(models).sort((a, b) => b[1].total - a[1].total);
     // 按开发商分组：组头行 + 组内按用量排序
@@ -1834,7 +1881,7 @@
               `<td style="text-align:left">${agentSel === 'all' ? [...m.agents].map(agentTag).join(' ') : ''}</td>` +
               `<td><div class="td-progress"><div class="progress-bg"><div class="progress-bar" style="width:${pct}%"></div></div><span>${pct}%</span></div></td>` +
               `<td>${fmt(m.input)}</td><td>${fmt(m.output)}</td><td>${fmt(m.cacheRead)}</td>` +
-              `<td><b>${fmt(m.total)}</b></td><td style="color:var(--dim)">${costCell(m.cost || null, m.costEst, m.total > 0)}</td>` +
+              `<td><b>${fmt(m.total)}</b></td><td style="color:var(--dim)">${costCell(m.hc ? m.cost : null, m.he ? m.costEst : null, m.total > 0)}</td>` +
               `</tr>`;
           }).join('')
         ).join('')
@@ -1846,17 +1893,17 @@
     const byMonth = {};
     daily.forEach(d => {
       const k = d.date.slice(0, 7);
-      const m = byMonth[k] = byMonth[k] || { input: 0, output: 0, cacheRead: 0, total: 0, cost: 0, hc: false, est: 0, ev: 0 };
+      const m = byMonth[k] = byMonth[k] || { input: 0, output: 0, cacheRead: 0, total: 0, cost: 0, hc: false, est: 0, he: false, ev: 0 };
       m.input += d.inputTokens; m.output += d.outputTokens; m.cacheRead += d.cacheReadTokens;
       m.total += d.totalTokens; m.ev += d.events;
       if (d.costUsd != null) { m.cost += d.costUsd; m.hc = true; }
-      if (d.costEst != null) m.est += d.costEst;
+      if (d.costEst != null) { m.est += d.costEst; m.he = true; }
     });
     const rows = Object.entries(byMonth);
     document.querySelector('#monthTable tbody').innerHTML = hasTok
       ? rows.map(([k, m]) =>
           `<tr><td style="text-align:left;font-weight:600">${k}</td><td>${fmt(m.input)}</td><td>${fmt(m.output)}</td>` +
-          `<td>${fmt(m.cacheRead)}</td><td><b>${fmt(m.total)}</b></td><td style="color:var(--dim)">${costCell(m.hc ? m.cost : null, m.est)}</td></tr>`
+          `<td>${fmt(m.cacheRead)}</td><td><b>${fmt(m.total)}</b></td><td style="color:var(--dim)">${costCell(m.hc ? m.cost : null, m.he ? m.est : null)}</td></tr>`
         ).join('')
       : rows.map(([k, m]) =>
           `<tr><td style="text-align:left;font-weight:600">${k}</td><td colspan="4" style="color:var(--dim)">${S.kpiNoToken}</td>` +
@@ -1877,6 +1924,9 @@
   sessExpandBtn.addEventListener('click', () => { sessExpanded = !sessExpanded; renderSessions(); });
 
   function renderSessions() {
+    // 会话级没有按模型的 token 拆分，筛选时明示总计口径，避免与其它面板数字对不上
+    document.getElementById('sessHint').textContent =
+      S.sessionHint + (selModel === 'all' ? '' : ' · ' + S.sessionModelNote);
     let list = (D.sessions || []).slice();
     if (agentSel !== 'all') list = list.filter(s => s.agent === agentSel);
     if (selModel !== 'all') list = list.filter(s => (s.modelsUsed || []).some(modelMatch));
@@ -1897,7 +1947,7 @@
     }
 
     const totalCount = list.length;
-    const displayList = sessExpanded ? list : list.slice(0, 8);
+    const displayList = sessExpanded ? list : list.slice(0, 10);
     const tbody = document.querySelector('#sessionTable tbody');
     if (!displayList.length) {
       tbody.innerHTML = `<tr><td colspan="8" style="text-align:left;color:var(--dim);padding:14px 10px;">${S.noSessionsFound}</td></tr>`;
@@ -1934,7 +1984,7 @@
         `</tr>`;
     }).join('');
 
-    if (totalCount > 8) {
+    if (totalCount > 10) {
       sessExpandBtn.style.display = 'inline-block';
       sessExpandBtn.textContent = sessExpanded ? S.showLess : S.showMore.replace('{n}', totalCount);
     } else {

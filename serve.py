@@ -11,9 +11,19 @@ PORT = 8931
 _lock = threading.Lock()
 
 
+# 仅对外提供页面与数据文件，目录里其余文件（备份、缓存、配置）一律 404
+ALLOWED_PATHS = {"/", "/index.html", "/data.js", "/favicon.ico"}
+
+
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=str(DIR), **kw)
+
+    def do_GET(self):
+        if self.path.split("?", 1)[0] not in ALLOWED_PATHS:
+            self.send_error(404)
+            return
+        super().do_GET()
 
     def end_headers(self):
         # data.js / 页面禁止缓存，保证刷新后拿到新数据和新页面（self.path 含查询串，先去掉）

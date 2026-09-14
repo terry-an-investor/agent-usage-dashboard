@@ -1,5 +1,6 @@
 node_modules/
 data.js
+index.backup.html
 .refresh.lock/
 __pycache__/
 .DS_Store

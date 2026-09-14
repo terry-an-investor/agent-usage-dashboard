@@ -106,6 +106,9 @@ def canon_model(name):
     s = re.sub(r"^cursor-", "", s)         # cursor-grok-4.5 -> grok-4.5
     s = re.sub(r"-expires-on-\d+$", "", s)
     s = re.sub(r"-\d{8}$", "", s)          # 末尾日期戳 -20250929
+    # 思考强度后缀不是独立模型：xxx-low/medium/high/xhigh 归并到基础模型
+    s = re.sub(r"(-(minimal|low|medium|high|xhigh))+$", "", s)
+    s = re.sub(r"[^a-z0-9._~-]+", "-", s).strip("-")   # 清洗非 ASCII/括号等乱码字符
     return s or "?"
 
 
@@ -268,7 +271,7 @@ def _bucket():
         "cacheCreationTokens": 0, "totalTokens": 0, "costUsd": 0.0,
         "costKnown": False, "events": 0, "models": defaultdict(lambda: {
             "inputTokens": 0, "outputTokens": 0, "cacheReadTokens": 0,
-            "cacheCreationTokens": 0, "cost": 0.0,
+            "cacheCreationTokens": 0, "cost": 0.0, "hasCost": False,
         }),
     }
 
@@ -346,8 +349,10 @@ def _accum(rows, key, inp=0, out=0, cr=0, cc=0, cost=None,
         mb["cacheCreationTokens"] += (m_cc or cc)
         if m_cost is not None:
             mb["cost"] += m_cost
+            mb["hasCost"] = True
         elif cost is not None:
             mb["cost"] += cost
+            mb["hasCost"] = True
 
 
 def add_usage(date, agent, project=None, hour=None, **kw):
@@ -409,6 +414,7 @@ def collect_ccusage():
         return
 
     agents_seen = set()
+    agents_daily = set()   # 仅 daily 段有数据的 agent 才算"可产出 token"
     # daily[]: {period, agents:[{agent, tokens..., totalCost, modelBreakdowns[]}]}
     for row in data.get("daily") or []:
         date = row.get("period") or row.get("date")
@@ -417,6 +423,7 @@ def collect_ccusage():
         for ag in row.get("agents") or []:
             agent = ag.get("agent") or "unknown"
             agents_seen.add(agent)
+            agents_daily.add(agent)
             models = ag.get("modelBreakdowns") or []
             add_usage(
                 date, agent,
@@ -431,6 +438,7 @@ def collect_ccusage():
                 b["cacheCreationTokens"] += mb.get("cacheCreationTokens", 0)
                 if mb.get("cost") is not None:
                     b["cost"] += mb["cost"]
+                    b["hasCost"] = True
 
     # session[]: {agent, period=sessionId, metadata{projectPath,lastActivity}, ...}
     for s in data.get("session") or []:
@@ -447,7 +455,7 @@ def collect_ccusage():
             cost=s.get("totalCost"))
 
     for a in agents_seen:
-        mark(a, tokens=True)
+        mark(a, tokens=a in agents_daily or None)
 
 
 # ------------------------------------------------------------ commandcode
@@ -631,9 +639,10 @@ def collect_devin(tmpdir):
             a["last"] = max(a["last"], r["created_at"] or 0)
         for sid, a in agg.items():
             wd = sess_meta.get(sid, {}).get("wd", "")
+            last = a["last"] / 1000 if a["last"] > 1e12 else a["last"]
             add_session("devin", sid,
                         project="/".join(wd.split("/")[-2:]) if wd else "",
-                        last=datetime.fromtimestamp(a["last"]).isoformat() if a["last"] else "",
+                        last=datetime.fromtimestamp(last).isoformat() if last else "",
                         models=sorted(a["models"]),
                         inp=a["i"], out=a["o"], cr=a["cr"], cc=a["cc"])
         if found:
@@ -1111,7 +1120,7 @@ def main():
                  "inputTokens": v["inputTokens"], "outputTokens": v["outputTokens"],
                  "cacheReadTokens": v["cacheReadTokens"],
                  "cacheCreationTokens": v["cacheCreationTokens"],
-                 "cost": round(v["cost"], 6)}
+                 "cost": round(v["cost"], 6), "hasCost": v["hasCost"]}
             if agent in NO_COST:
                 e = est_cost(prices, m, v["inputTokens"], v["outputTokens"],
                              v["cacheReadTokens"], v["cacheCreationTokens"])
@@ -1228,10 +1237,11 @@ def main():
         "warnings": warnings,
     }
     json_str = json.dumps(payload, ensure_ascii=False).replace("<", "\\u003c")
-    tmp_out = Path(tempfile.mktemp(prefix="datajs-", dir=str(DIR)))
-    tmp_out.write_text("window.DASHBOARD_DATA = " + json_str + ";\n")
-    os.chmod(tmp_out, 0o600)
-    os.replace(tmp_out, DIR / "data.js")
+    fd, tmp_path = tempfile.mkstemp(prefix="datajs-", dir=str(DIR))
+    with os.fdopen(fd, "w") as f:
+        f.write("window.DASHBOARD_DATA = " + json_str + ";\n")
+    os.chmod(tmp_path, 0o600)
+    os.replace(tmp_path, DIR / "data.js")
 
     n_tok = sum(1 for a in agents if a["hasTokens"])
     print(f"data.js updated: {len(daily)} (date,agent) rows, "
