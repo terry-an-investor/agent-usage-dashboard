@@ -207,7 +207,7 @@
   tr.ag-row, tr.pj-row { cursor: pointer; }
   tr.ag-row.on, tr.pj-row.on { background: var(--primary-light); }
   tr.dev-row td {
-    background: #f1f5f9; color: var(--dim); font-size: 11px; letter-spacing: .04em;
+    background: #f1f5f9; color: #475569; font-size: 11px; letter-spacing: .04em;
     padding: 5px 12px; border-bottom: 1px solid #e2e8f0;
   }
   tr.dev-row td b { color: var(--text); font-size: 12px; margin-right: 10px; }
@@ -380,13 +380,14 @@
     </div>
   </header>
 
+  <main>
   <!-- Filter Bar -->
   <div class="card agentbar">
     <span class="ab-label" id="agentBarLabel"></span>
     <select id="agentSel" class="agent-sel" aria-label="Agent"></select>
     <span class="ab-label" id="modelBarLabel"></span>
     <div class="msel" id="modelSel">
-      <button type="button" id="modelSelBtn" class="agent-sel msel-btn" aria-haspopup="listbox" aria-expanded="false"><span id="modelSelTxt"></span><span class="msel-arrow">▾</span></button>
+      <button type="button" id="modelSelBtn" class="agent-sel msel-btn" aria-haspopup="listbox" aria-expanded="false" aria-controls="modelSelPanel"><span id="modelSelTxt"></span><span class="msel-arrow">▾</span></button>
       <div class="msel-panel" id="modelSelPanel" role="listbox"></div>
     </div>
     <span class="ab-label" id="projBarLabel"></span>
@@ -498,7 +499,7 @@
       </div>
       <span class="range" id="agentRange"></span>
     </div>
-    <div class="table-scroll"><table id="agentTable">
+    <div class="table-scroll" tabindex="0"><table id="agentTable">
       <thead>
         <tr>
           <th data-i18n="thAgent">Agent</th>
@@ -523,7 +524,7 @@
     <div class="card">
       <h2 data-i18n="modelUsage">模型用量</h2>
       <div class="hint" data-i18n="modelHint">按总 token 排序 · 跟随上方时间范围</div>
-      <div class="table-scroll"><table id="modelTable" style="margin-top:12px;">
+      <div class="table-scroll" tabindex="0"><table id="modelTable" style="margin-top:12px;">
         <thead>
           <tr>
             <th data-i18n="thModel">模型</th>
@@ -544,7 +545,7 @@
     <div class="card">
       <h2 data-i18n="monthlyTitle">按月汇总</h2>
       <div class="hint" id="monthlyHint" data-i18n="monthlyHint">按来源数据估算 · 固定全时间段</div>
-      <div class="table-scroll"><table id="monthTable" style="margin-top:12px;">
+      <div class="table-scroll" tabindex="0"><table id="monthTable" style="margin-top:12px;">
         <thead>
           <tr>
             <th data-i18n="thMonth">月份</th>
@@ -568,7 +569,7 @@
         <div class="hint" data-i18n="projHint">按总 token 排序 · 点击行可筛选项目</div>
       </div>
     </div>
-    <div class="table-scroll"><table id="projTable" style="margin-top:12px;">
+    <div class="table-scroll" tabindex="0"><table id="projTable" style="margin-top:12px;">
       <thead>
         <tr>
           <th data-i18n="thProject" style="text-align:left;">项目</th>
@@ -604,7 +605,7 @@
         </select>
       </div>
     </div>
-    <div class="table-scroll"><table id="sessionTable">
+    <div class="table-scroll" tabindex="0"><table id="sessionTable">
       <thead>
         <tr>
           <th data-i18n="thSessionId">会话 ID</th>
@@ -632,7 +633,7 @@
         <div class="hint" data-i18n="recHint">小时粒度用量 · 仅含原生解析来源（ccusage 来源仅日粒度）</div>
       </div>
     </div>
-    <div class="table-scroll"><table id="recTable" style="margin-top:12px;">
+    <div class="table-scroll" tabindex="0"><table id="recTable" style="margin-top:12px;">
       <thead>
         <tr>
           <th data-i18n="thTime" style="text-align:left;">时间</th>
@@ -660,7 +661,7 @@
       <span data-i18n="srcTitle">数据来源与覆盖说明</span>
       <span class="price-badge" data-i18n="srcBadge">各 Agent 本地日志 ▾</span>
     </summary>
-    <div class="table-scroll"><table id="srcTable">
+    <div class="table-scroll" tabindex="0"><table id="srcTable">
       <thead>
         <tr>
           <th data-i18n="thAgent">Agent</th>
@@ -673,6 +674,7 @@
       <tbody></tbody>
     </table></div>
   </details>
+  </main>
 
   <footer>
     <span data-i18n="footer1">数据来源：各 Agent 本机日志 / 数据库（详见上方「数据来源」），仅本地处理，未上传任何数据。</span><br>
@@ -1084,17 +1086,23 @@
     allItem.className = 'msel-item' + (selModel === 'all' ? ' sel' : '');
     allItem.textContent = S.allModels;
     allItem.setAttribute('role', 'option');
+    allItem.setAttribute('aria-selected', selModel === 'all' ? 'true' : 'false');
+    allItem.tabIndex = -1;
     allItem.addEventListener('click', () => pickModel('all'));
     modelSelPanel.appendChild(allItem);
     if (!devOrder.length) return;
     for (const d of devOrder) {
-      const names = byDev[d].sort((a, b) => mTot[b] - mTot[a]);
-      const devTot = names.reduce((s, n) => s + mTot[n], 0);
+      const names = byDev[d].sort((a, b) => (mTot[b] || 0) - (mTot[a] || 0));
+      const devTot = names.reduce((s, n) => s + (mTot[n] || 0), 0);
       const devSel = selModel === 'dev:' + d;
       const inSel = names.includes(selModel);
       const head = document.createElement('div');
       head.className = 'msel-dev' + (devSel ? ' sel' : '') + (inSel ? ' open' : '');
       head.innerHTML = `<span class="msel-arrow">▸</span><span style="overflow:hidden;text-overflow:ellipsis">${esc(d)}</span><span class="cnt">${fmt(devTot)}</span>`;
+      head.setAttribute('role', 'option');
+      head.setAttribute('aria-selected', devSel ? 'true' : 'false');
+      head.setAttribute('aria-expanded', inSel ? 'true' : 'false');
+      head.tabIndex = -1;
       const kids = document.createElement('div');
       kids.className = 'msel-models';
       kids.style.display = inSel ? '' : 'none';
@@ -1105,12 +1113,16 @@
         const open = kids.style.display === 'none';
         kids.style.display = open ? '' : 'none';
         head.classList.toggle('open', open);
+        head.setAttribute('aria-expanded', open ? 'true' : 'false');
       });
       for (const n of names) {
         const it = document.createElement('div');
         it.className = 'msel-item' + (selModel === n ? ' sel' : '');
         it.setAttribute('role', 'option');
-        it.innerHTML = `<span style="overflow:hidden;text-overflow:ellipsis">${esc(n)}</span><span class="cnt">${fmt(mTot[n])}</span>`;
+        it.setAttribute('aria-selected', selModel === n ? 'true' : 'false');
+        it.tabIndex = -1;
+        it.innerHTML = `<span style="overflow:hidden;text-overflow:ellipsis">${esc(n)}</span><span class="cnt">${fmt(mTot[n] || 0)}</span>`;
+        if (!mTot[n]) it.style.opacity = '.45';   // 范围内无用量但仍可选
         it.addEventListener('click', () => pickModel(n));
         kids.appendChild(it);
       }
@@ -1133,30 +1145,43 @@
     document.getElementById('modelBarLabel').textContent = S.modelFilter;
     document.getElementById('projBarLabel').textContent = S.projFilter;
     agentSelEl.setAttribute('aria-label', S.agentFilter.trim());
-    modelSelBtn.setAttribute('aria-label', S.modelFilter.trim());
     projSelEl.setAttribute('aria-label', S.projFilter.trim());
     if (!fillSelect(agentSelEl, agentSel,
       [['all', S.allAgents], ...D.agents.map(a => [a.id, a.label])])) {
       agentSel = 'all'; agentSelEl.value = 'all'; reset = true;
     }
 
-    // 模型列表只跟随 agent 维度：选项目不应使已选模型"失效"而被静默重置
-    const mTot = {};
+    // 模型列表只跟随 agent 维度（全时段）：选项目/改范围不应使已选模型"失效"而被静默重置
+    const mAll = {};
     for (const r of rawDaily) {
       if (agentSel !== 'all' && r.agent !== agentSel) continue;
+      for (const mb of r.modelBreakdowns || [])
+        mAll[mb.modelName] = (mAll[mb.modelName] || 0) + mb.inputTokens + mb.outputTokens + mb.cacheReadTokens + (mb.cacheCreationTokens || 0);
+    }
+    // 但显示计数跟随当前范围+项目筛选，与模型表口径一致
+    const mTot = {};
+    const mSrc = projSel === 'all' ? rawDaily : rawProjDaily;
+    for (const r of mSrc) {
+      if (agentSel !== 'all' && r.agent !== agentSel) continue;
+      if (projSel !== 'all' && r.project !== projSel) continue;
+      if (r.date < rangeStart || r.date > rangeEnd) continue;
       for (const mb of r.modelBreakdowns || [])
         mTot[mb.modelName] = (mTot[mb.modelName] || 0) + mb.inputTokens + mb.outputTokens + mb.cacheReadTokens + (mb.cacheCreationTokens || 0);
     }
     // 模型下拉：树形（开发商 → 模型，默认折叠）
     const byDev = {};
-    for (const n of Object.keys(mTot)) (byDev[devOf(n)] = byDev[devOf(n)] || []).push(n);
+    for (const n of Object.keys(mAll)) {
+      if (n === '?') continue;   // 无模型信息不参与筛选（modelMatch 永不命中）
+      (byDev[devOf(n)] = byDev[devOf(n)] || []).push(n);
+    }
     const devOrder = Object.keys(byDev).sort((a, b) =>
-      byDev[b].reduce((s, n) => s + mTot[n], 0) - byDev[a].reduce((s, n) => s + mTot[n], 0));
-    if (!(selModel === 'all' || selModel in mTot || (selModel.startsWith('dev:') && selModel.slice(4) in byDev))) {
+      byDev[b].reduce((s, n) => s + (mTot[n] || 0), 0) - byDev[a].reduce((s, n) => s + (mTot[n] || 0), 0));
+    if (!(selModel === 'all' || selModel in mAll || (selModel.startsWith('dev:') && selModel.slice(4) in byDev))) {
       selModel = 'all'; reset = true;
     }
     modelSelTxt.textContent = selModel === 'all' ? S.allModels
       : selModel.startsWith('dev:') ? selModel.slice(4) : selModel;
+    modelSelBtn.setAttribute('aria-label', `${S.modelFilter.trim()} ${modelSelTxt.textContent}`);
     renderModelPanel(byDev, mTot, devOrder);
 
     const pTot = {};
@@ -1180,6 +1205,47 @@
     e.stopPropagation();
     const open = modelSelEl.classList.toggle('open');
     modelSelBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  // 键盘操作：按钮上 ↓/Enter/Space 打开并聚焦当前项；面板内 ↑↓ 移动、→/← 展开收起、
+  // Enter/Space 选中、Esc 关闭并回到按钮、Tab 关闭让焦点自然前进
+  const mselItems = () => [...modelSelPanel.querySelectorAll('.msel-item,.msel-dev')]
+    .filter(el => el.offsetParent !== null);
+  modelSelBtn.addEventListener('keydown', e => {
+    if (e.key !== 'ArrowDown' && e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    if (!modelSelEl.classList.contains('open')) modelSelBtn.click();
+    const items = mselItems();
+    (items.find(el => el.classList.contains('sel')) || items[0])?.focus();
+  });
+  modelSelPanel.addEventListener('keydown', e => {
+    const items = mselItems();
+    const cur = document.activeElement;
+    const i = items.indexOf(cur);
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const j = e.key === 'ArrowDown' ? i + 1 : i - 1;
+      items[(j + items.length) % items.length]?.focus();
+    } else if (e.key === 'Home' || e.key === 'End') {
+      e.preventDefault();
+      items[e.key === 'Home' ? 0 : items.length - 1]?.focus();
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault(); cur.click();
+    } else if (e.key === 'ArrowRight' && cur.classList.contains('msel-dev')) {
+      if (cur.nextElementSibling.style.display === 'none') {
+        e.preventDefault(); cur.querySelector('.msel-arrow').click();
+      }
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      if (cur.classList.contains('msel-dev')) {
+        if (cur.nextElementSibling.style.display !== 'none') cur.querySelector('.msel-arrow').click();
+      } else {
+        cur.closest('.msel-models')?.previousElementSibling?.focus();
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault(); closeModelPanel(); modelSelBtn.focus();
+    } else if (e.key === 'Tab') {
+      closeModelPanel();
+    }
   });
   document.addEventListener('click', e => { if (!modelSelEl.contains(e.target)) closeModelPanel(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModelPanel(); });
@@ -1341,7 +1407,9 @@
     }
     const d = (cur - prev) / prev * 100;
     if (!isFinite(d) || Math.abs(d) < 0.05) return '';
-    return `<span class="hero-delta">${d > 0 ? '+' : ''}${d.toFixed(1)}%</span>`;
+    // 上周期基数过小时百分比爆炸成噪声（如 +28995%），封顶为 >+999%
+    const txt = d >= 999.95 ? '>+999%' : `${d > 0 ? '+' : ''}${d.toFixed(1)}%`;
+    return `<span class="hero-delta">${txt}</span>`;
   }
 
   function renderHero(days, spanDays) {
@@ -2148,6 +2216,7 @@
     const b = e.target.closest('button');
     if (!b) return;
     applyPreset(b.dataset.p);
+    renderAgentBar();
     renderRange();
   });
   document.getElementById('dApply').addEventListener('click', () => {
@@ -2159,6 +2228,7 @@
     rangeStart = a; rangeEnd = b;
     activePreset = null;
     document.querySelectorAll('#presetTabs button').forEach(x => { x.classList.remove('on'); x.setAttribute('aria-pressed', 'false'); });
+    renderAgentBar();
     renderRange();
   });
 

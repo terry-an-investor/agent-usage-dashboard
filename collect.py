@@ -94,6 +94,9 @@ def _norm_model(s):
     return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")
 
 
+CANON_RAWS = {}   # canon -> {剥离强度后缀前的写法}：供输出前复核归并
+
+
 def canon_model(name):
     """模型名规范化：同一模型在不同来源写法不同（[pi] deepseek-v4-flash /
     deepseek/deepseek-v4.1-flash / cursor-grok-4.5-high / xxx-expires-on-0910 /
@@ -106,10 +109,16 @@ def canon_model(name):
     s = re.sub(r"^cursor-", "", s)         # cursor-grok-4.5 -> grok-4.5
     s = re.sub(r"-expires-on-\d+$", "", s)
     s = re.sub(r"-\d{8}$", "", s)          # 末尾日期戳 -20250929
-    # 思考强度后缀不是独立模型：xxx-low/medium/high/xhigh 归并到基础模型
-    s = re.sub(r"(-(minimal|low|medium|high|xhigh))+$", "", s)
     s = re.sub(r"[^a-z0-9._~-]+", "-", s).strip("-")   # 清洗非 ASCII/括号等乱码字符
-    return s or "?"
+    pre = s
+    # 思考强度后缀不是独立模型：xxx-low/medium/high/xhigh 归并到基础模型。
+    # 输出前按 CANON_RAWS 复核：若该基础名只对应单一写法（真实型号名本身以
+    # -high 结尾，如 swe-2-high），则还原原名，避免改名无中生有
+    s = re.sub(r"(-(minimal|low|medium|high|xhigh))+$", "", s)
+    if not s or s.isdigit():               # 退化结果（如 火山)-0 -> 0）视为无模型信息
+        return "?"
+    CANON_RAWS.setdefault(s, set()).add(pre)
+    return s
 
 
 def _build_price_map(raw):
@@ -1113,10 +1122,23 @@ def main():
     if prices:
         print(f"models.dev 价目: {len(prices)} 个模型")
 
+    # 思考强度归并复核：仅当某基础名确有多种写法（或基础名本身存在）时保持归并；
+    # 单一写法被剥离改名的（真实型号就叫 xxx-high）还原为原名。成本估算仍用 canon 名查价
+    RENAME = {}
+    for c, raws in CANON_RAWS.items():
+        if len(raws) == 1:
+            r = next(iter(raws))
+            if r != c and r and not r.isdigit():
+                RENAME[c] = r
+    CANON_OF = {v: k for k, v in RENAME.items()}
+
+    def disp(m):
+        return RENAME.get(m, m)
+
     def _models_list(b, agent):
         out = []
         for m, v in sorted(b["models"].items()):
-            d = {"modelName": m,
+            d = {"modelName": disp(m),
                  "inputTokens": v["inputTokens"], "outputTokens": v["outputTokens"],
                  "cacheReadTokens": v["cacheReadTokens"],
                  "cacheCreationTokens": v["cacheCreationTokens"],
@@ -1173,11 +1195,12 @@ def main():
                          s["cacheCreationTokens"])
             if e is not None:
                 s["costEst"] = round(e, 6)
+        s["modelsUsed"] = sorted({disp(m) for m in s["modelsUsed"]})
 
     hourly = []
     for (h, agent, model, project), b in sorted(hourly_rows.items()):
         row = {
-            "hour": h, "agent": agent, "model": model, "project": project,
+            "hour": h, "agent": agent, "model": disp(model), "project": project,
             "inputTokens": b["inputTokens"], "outputTokens": b["outputTokens"],
             "cacheReadTokens": b["cacheReadTokens"],
             "cacheCreationTokens": b["cacheCreationTokens"],
@@ -1222,7 +1245,7 @@ def main():
         model_names.add(h["model"])
     model_devs = {}
     for m in sorted(model_names):
-        d = _lookup_map(dev_map, m)
+        d = _lookup_map(dev_map, m) or _lookup_map(dev_map, CANON_OF.get(m, m))
         if d:
             model_devs[m] = d
 

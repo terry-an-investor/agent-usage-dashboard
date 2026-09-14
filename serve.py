@@ -25,6 +25,12 @@ class Handler(SimpleHTTPRequestHandler):
             return
         super().do_GET()
 
+    def do_HEAD(self):
+        if self.path.split("?", 1)[0] not in ALLOWED_PATHS:
+            self.send_error(404)
+            return
+        super().do_HEAD()
+
     def end_headers(self):
         # data.js / 页面禁止缓存，保证刷新后拿到新数据和新页面（self.path 含查询串，先去掉）
         p = self.path.split("?", 1)[0]
