@@ -1,4 +1,4 @@
-# agent-usage-dashboard（原 kimi-usage-dashboard）
+# agent-usage-dashboard
 
 **[English](README.md)** | 简体中文
 
