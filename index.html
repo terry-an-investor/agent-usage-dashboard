@@ -974,7 +974,9 @@
       });
       src = sess.map(s => {
         const mus = s.modelsUsed || [];
-        const single = selModel !== 'all' && mus.length === 1;
+        // 单模型会话可以把用量无歧义地归到该模型（模型表也能显示）；
+        // 多模型会话不拆，避免把总量全算到某一个模型头上
+        const single = mus.length === 1;
         return {
           date: (s.lastActivity || '').slice(0, 10) || todayStr,
           agent: s.agent, project: s.project,
