@@ -575,7 +575,7 @@
     <div class="card-head">
       <div>
         <h2 data-i18n="projTitle">项目分布</h2>
-        <div class="hint" data-i18n="projHint">按总 token 排序 · 点击行展开该项目的会话 · 项目名按来源原样展示（同名项目可能拆分或合并显示）</div>
+        <div class="hint" data-i18n="projHint">按总 token 排序 · 点击行展开该项目的会话 · 同一项目的不同写法已合并显示</div>
       </div>
     </div>
     <div class="table-scroll" tabindex="0"><table id="projTable" style="margin-top:12px;">
@@ -674,7 +674,7 @@
       distTitle: '用量分布', distHint: '范围内各维度 token 占比 · 前 5 项',
       wkTitle: '分时活跃', wkHint: '星期 × 小时 · 仅含小时粒度来源',
       thTime: '时间', unpriced: '未定价', distOther: '其他', devOther: '其他',
-      projTitle: '项目分布', projHint: '按总 token 排序 · 点击行展开该项目的会话 · 项目名按来源原样展示（同名项目可能拆分或合并显示）', thProject: '项目',
+      projTitle: '项目分布', projHint: '按总 token 排序 · 点击行展开该项目的会话 · 同一项目的不同写法已合并显示', thProject: '项目',
       projFilterOn: '只看该项目', projFilterOff: '取消只看该项目',
       thAgent: 'Agent', thSessions: '会话', thDays: '天数', thEvents: '活动',
       thSource: '数据来源', thHasTokens: 'Token', thHasCost: '成本', thNote2: '说明',
@@ -751,7 +751,7 @@
       distTitle: 'Distribution', distHint: 'Token share per dimension in range · top 5',
       wkTitle: 'Activity by Hour', wkHint: 'Weekday × hour · sources with hour granularity only',
       thTime: 'Time', unpriced: 'Unpriced', distOther: 'Other', devOther: 'Other',
-      projTitle: 'Projects', projHint: 'Sorted by total tokens · click a row to expand its sessions · names are shown as each source reports them (a project may be split or merged)', thProject: 'Project',
+      projTitle: 'Projects', projHint: 'Sorted by total tokens · click a row to expand its sessions · different spellings of the same project are merged', thProject: 'Project',
       projFilterOn: 'Filter to this project', projFilterOff: 'Clear project filter',
       thAgent: 'Agent', thSessions: 'Sessions', thDays: 'Days', thEvents: 'Events',
       thSource: 'Source', thHasTokens: 'Tokens', thHasCost: 'Cost', thNote2: 'Note',
@@ -973,6 +973,65 @@
       rep.set(it.name, it.name);
     }
     return (name) => rep.get(name) || name;
+  })();
+
+  // ---------- 项目显示名归一化 ----------
+  // 目标：家目录下的项目统一成 "~/ + 相对路径"（保留真实大小写与 / 分隔），
+  // 来源自定标签（cursor.com / antigravity / empty-window…）保持原样。
+  // 素材只有名字本身，所以：① 从 --Users-<用户名>-…-- 里认出家目录名；
+  // ② 先在**归并后的项目**上统计首段，挂了 ≥2 个项目的才算"父目录"，
+  //    用它把扁平名还原（desktop-trading-logic → Desktop/trading-logic、myprojects-obelisk → myprojects/obelisk）。
+  const projLabel = (() => {
+    const reps = new Set();
+    for (const r of rawProjDaily) if (r.project) reps.add(projGroupOf(r.project));
+    for (const s of D.sessions || []) if (s.project) reps.add(projGroupOf(s.project));
+
+    // 家目录名：ccusage/pi 给的目录名把 ~ 编码成了 -Users-<user>-…
+    const home = new Set();
+    for (const n of reps) {
+      const m = String(n).match(/-Users-([^-]+)-/i);
+      if (m) home.add(m[1].toLowerCase());
+    }
+    const readable = (raw) => {
+      let name = String(raw || '');
+      let under = false;
+      const m = name.match(/^-*Users-[^-]+-(.*?)-*$/i);
+      if (m && /-Users-/i.test(name)) { name = m[1].replace(/^-+|-+$/g, ''); under = true; }
+      else if (name.startsWith('~/')) { name = name.slice(2); under = true; }
+      return { name, under };
+    };
+    const cnt = new Map(), realHead = new Map();
+    for (const n of reps) {
+      const { name } = readable(n);
+      // 只认"路径形态"里的父目录：来源自定的标签（cursor-ide-chat、cursor cloud agent）
+      // 首段同样是 "cursor"，但那是标签前缀而不是目录，不能拿去拆名字
+      if (!name.includes('/')) continue;
+      const head = name.split('/')[0];
+      if (!head || home.has(head.toLowerCase())) continue;
+      const k = head.toLowerCase();
+      cnt.set(k, (cnt.get(k) || 0) + 1);
+      realHead.set(k, head);
+    }
+    const parents = new Map();
+    for (const [k, c] of cnt) if (c >= 2) parents.set(k, realHead.get(k));
+
+    return (raw) => {
+      let { name, under } = readable(raw);
+      const head = name.split('/')[0];
+      if (home.has(name.toLowerCase())) return '~';           // 家目录本身
+      if (home.has(head.toLowerCase())) {                     // zhaozhoubin/dim-agent → dim-agent
+        name = name.slice(head.length).replace(/^\/+/, '');
+        under = true;
+      }
+      if (name.includes('/')) {
+        if (parents.has(head.toLowerCase())) under = true;
+      } else {
+        const segs = name.split(/[-\s_]/).filter(Boolean);
+        const p = segs.length > 1 ? parents.get(segs[0].toLowerCase()) : null;
+        if (p) { name = p + '/' + name.slice(segs[0].length + 1); under = true; }
+      }
+      return under ? '~/' + name : name;
+    };
   })();
 
   // 判断"该来源是否已有项目级日粒度"必须按 (agent, 项目组) **组合**：
@@ -1288,7 +1347,7 @@
       const k = projGroupOf(s.project);
       if (s.project && !hasOwn(pTot, k)) pTot[k] = s.totalTokens + (s.events || 0);
     }
-    const pItems = Object.entries(pTot).sort((a, b) => b[1] - a[1]).map(([n]) => [n, n]);
+    const pItems = Object.entries(pTot).sort((a, b) => b[1] - a[1]).map(([n]) => [n, projLabel(n)]);
     if (!fillSelect(projSelEl, projSel, [['all', S.allProjects], ...pItems])) {
       projSel = 'all'; projSelEl.value = 'all'; reset = true;
     }
@@ -1898,7 +1957,7 @@
           const pct = grand > 0 ? ((p.tot / grand) * 100).toFixed(1) : '0.0';
           const open = expandedProjs.has(name);
           const row = `<tr class="pj-row ${projSel === name ? 'on' : ''}" data-proj="${esc(name)}" aria-expanded="${open}" style="cursor:pointer">` +
-            `<td style="text-align:left;font-weight:600"><span class="pj-caret">${open ? '▾' : '▸'}</span>${esc(name)}</td>` +
+            `<td style="text-align:left;font-weight:600"><span class="pj-caret">${open ? '▾' : '▸'}</span>${esc(projLabel(name))}</td>` +
             `<td>${[...p.agents].map(agentTag).join(' ')}</td>` +
             `<td><div class="td-progress"><div class="progress-bg"><div class="progress-bar" style="width:${pct}%"></div></div><span>${pct}%</span></div></td>` +
             `<td>${p.days.size}</td><td>${p.sess}</td>` +

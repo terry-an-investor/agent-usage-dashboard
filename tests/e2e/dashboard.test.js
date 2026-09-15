@@ -334,6 +334,17 @@ describe('筛选与状态', () => {
       assert.ok(ids.includes('s-proj-a-alt'),
         `另一种写法的会话也应在展开区里：${JSON.stringify(ids)}`);
     }, '?p=all');
+
+    // 显示名要归一成「~/ + 家目录相对路径」，而不是把各来源的写法原样透传
+    await withPage(async (page) => {
+      const label = await page.eval(`
+        const tr = [...document.querySelectorAll('#projTable tbody tr.pj-row')]
+          .find(r => r.dataset.proj === 'Projects/proj-a');
+        return tr ? tr.children[0].textContent.replace(/[▸▾\\s]/g, '') : null;
+      `);
+      assert.equal(label, '~/Projects/proj-a',
+        `显示名应归一成 ~/ 相对路径，实际 ${label}`);
+    }, '?p=all');
   });
 
   test('事件型来源进入活动量口径', async () => {

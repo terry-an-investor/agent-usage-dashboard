@@ -172,6 +172,13 @@ def build_fixture():
          "inputTokens": 120, "outputTokens": 0, "cacheReadTokens": 0,
          "cacheCreationTokens": 0, "totalTokens": 120, "costUsd": None,
          "costEst": 0.12, "events": 0},
+        # 让 "Projects" 成为一个被确认的父目录（≥2 个项目挂在它下面），
+        # 显示名才会把扁平名还原成 ~/Projects/... —— 与真实数据的 Desktop/myprojects 同理
+        {"sessionId": "s-proj-other", "agent": "est", "project": "Projects/proj-other",
+         "lastActivity": ts(1), "modelsUsed": ["claude-y"],
+         "inputTokens": 60, "outputTokens": 0, "cacheReadTokens": 0,
+         "cacheCreationTokens": 0, "totalTokens": 60, "costUsd": None,
+         "costEst": 0.06, "events": 0},
     ]
 
     hourly = [
