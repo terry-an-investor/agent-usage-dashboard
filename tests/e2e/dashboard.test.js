@@ -133,19 +133,22 @@ describe('筛选与状态', () => {
     }, '?a=evonly&p=all');
   });
 
-  test('会话明细跟随时间范围（M2）', async () => {
-    const rowCount = (page) => page.eval(`
-      return [...document.querySelectorAll('#sessionTable tbody tr')]
-        .filter((tr) => !tr.textContent.includes('未找到')).length;
+  test('展开区里的会话跟随时间范围（M2）', async () => {
+    // 回归点：会话面板曾完全忽略时间范围，恒为全部条数。
+    // 会话明细已并入项目分布的行展开区，口径必须跟着一起走。
+    const expandedSessions = (page) => page.eval(`
+      return [...document.querySelectorAll('#projTable tbody tr.proj-expand .sess-row')].length;
     `);
-    const allCount = await withPage(rowCount, '?p=all');
-    const todayCount = await withPage(async (page) => {
-      // 回归点：会话面板曾完全忽略时间范围，恒为全部条数
+    const countAt = (query) => withPage(async (page) => {
+      await page.click('#projTable tbody tr[data-proj="proj-a"]');
       assert.equal(await page.eval("return document.body.innerText.includes('{n}')"), false,
         '展开按钮不应残留 {n} 模板');
-      return rowCount(page);
-    }, '?p=today');
-    assert.ok(allCount > todayCount, `全时段会话数(${allCount}) 应多于今日(${todayCount})`);
+      return expandedSessions(page);
+    }, query);
+    const allCount = await countAt('?p=all');
+    const todayCount = await countAt('?p=today');
+    assert.ok(allCount > todayCount,
+      `全时段会话数(${allCount}) 应多于今日(${todayCount})`);
   });
 
   test('趋势图 tab / 图例 / 实际渲染三者一致（M4）', async () => {
@@ -263,6 +266,43 @@ describe('筛选与状态', () => {
       assert.equal(row > 0, kpi > 0,
         `多模型会话应与 KPI 同口径（kpi=${kpi} row=${row}）`);
     }, '?p=all&pj=proj-sesonly-multi&m=dev:Anthropic');
+  });
+
+  test('项目行可展开出该项目的会话明细（与「会话」列同口径）', async () => {
+    await withPage(async (page) => {
+      // 默认收起
+      assert.equal(await page.count('#projTable tbody tr.proj-expand'), 0,
+        '项目行默认不应有展开区');
+
+      const row = await page.eval(`
+        const tr = [...document.querySelectorAll('#projTable tbody tr')]
+          .find(r => r.dataset.proj === 'proj-a');
+        return tr ? { sess: tr.children[4].textContent.trim(),
+                      tot: tr.children[5].textContent.trim() } : null;
+      `);
+      assert.ok(row, '应有 proj-a 这一行');
+
+      await page.click('#projTable tbody tr[data-proj="proj-a"]');
+      assert.equal(await page.count('#projTable tbody tr.proj-expand'), 1,
+        '点击后应出现该项目的展开区');
+      const sessRows = await page.count('#projTable tbody tr.proj-expand .sess-row');
+      assert.equal(String(sessRows), row.sess,
+        `展开区的会话数(${sessRows}) 应等于该行「会话」列(${row.sess})`);
+
+      // 再点一次收起
+      await page.click('#projTable tbody tr[data-proj="proj-a"]');
+      assert.equal(await page.count('#projTable tbody tr.proj-expand'), 0, '再点应收起');
+    }, '?p=all');
+  });
+
+  test('独立的会话明细卡片已并入项目分布', async () => {
+    await withPage(async (page) => {
+      assert.equal(await page.count('#sessionTable'), 0,
+        '不应再有独立的会话明细表');
+      assert.equal(await page.eval(
+        "return document.body.innerText.includes('会话明细')"), false,
+        '不应残留「会话明细」标题');
+    }, '?p=all');
   });
 
   test('事件型来源进入活动量口径', async () => {

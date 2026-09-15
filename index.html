@@ -195,8 +195,16 @@
   table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
   th { text-align: right; color: var(--dim); font-weight: 500; font-size: 11.5px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
   th:first-child, td:first-child { text-align: left; }
-  #sessionTable th:nth-child(2), #sessionTable td:nth-child(2),
-  #sessionTable th:nth-child(3), #sessionTable td:nth-child(3) { text-align: left; }
+  .sess-inner th:nth-child(2), .sess-inner td:nth-child(2),
+  .sess-inner th:nth-child(3), .sess-inner td:nth-child(3) { text-align: left; }
+
+  /* 项目行的展开区：内嵌该项目的会话明细（原「会话明细」卡片） */
+  tr.proj-expand > td { padding: 0; border-top: none; }
+  .sess-wrap { padding: 6px 10px 10px; background: var(--bg-soft, rgba(127, 127, 127, .06)); }
+  .sess-inner { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .sess-inner th { color: var(--dim); font-weight: 600; padding: 4px 8px; text-align: right; white-space: nowrap; }
+  .sess-inner td { padding: 4px 8px; text-align: right; }
+  .pj-caret { display: inline-block; width: 13px; color: var(--dim); }
   td { padding: 9px 10px; border-bottom: 1px solid var(--divider); text-align: right; }
   tr:last-child td { border-bottom: none; }
   tbody tr { transition: background 0.12s ease; }
@@ -567,7 +575,7 @@
     <div class="card-head">
       <div>
         <h2 data-i18n="projTitle">项目分布</h2>
-        <div class="hint" data-i18n="projHint">按总 token 排序 · 点击行可筛选项目 · 项目名按来源原样展示（同名项目可能拆分或合并显示）</div>
+        <div class="hint" data-i18n="projHint">按总 token 排序 · 点击行展开该项目的会话 · 项目名按来源原样展示（同名项目可能拆分或合并显示）</div>
       </div>
     </div>
     <div class="table-scroll" tabindex="0"><table id="projTable" style="margin-top:12px;">
@@ -590,41 +598,7 @@
     </div>
   </div>
 
-  <!-- Session Explorer -->
-  <div class="card">
-    <div class="card-head">
-      <div>
-        <h2 data-i18n="sessionTitle">会话明细 (Session Explorer)</h2>
-        <div class="hint" id="sessHint" data-i18n="sessionHint">按消耗排序的高用量会话 · 点击 ID 即可复制</div>
-      </div>
-      <div class="head-right sess-ctrls">
-        <input type="text" id="sessSearch" class="sess-search" data-i18n-ph="sessionSearchPh" placeholder="搜索 Session ID..." aria-label="Search sessions">
-        <select id="sessSort" class="sess-sort" aria-label="Sort sessions">
-          <option value="total" data-i18n="sortTotal">按总 Token 排序</option>
-          <option value="cost" data-i18n="sortCost">按估算成本排序</option>
-          <option value="net" data-i18n="sortNet">按净生成量排序</option>
-        </select>
-      </div>
-    </div>
-    <div class="table-scroll" tabindex="0"><table id="sessionTable">
-      <thead>
-        <tr>
-          <th data-i18n="thSessionId">会话 ID</th>
-          <th data-i18n="thAgent">Agent</th>
-          <th data-i18n="thModels" style="text-align:left;">模型</th>
-          <th data-i18n="thBreakdown" style="width:68px;">构成</th>
-          <th data-i18n="thNet">净生成</th>
-          <th data-i18n="thCacheRead">缓存读取</th>
-          <th data-i18n="thTotal">总计</th>
-          <th data-i18n="thCost">估算成本</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table></div>
-    <div class="expand-row" id="sessionExpandRow">
-      <button class="btn-expand" id="sessExpandBtn" data-i18n="showMore">展开更多</button>
-    </div>
-  </div>
+  <!-- 会话明细已并入「项目分布」：点项目行展开该项目的会话（原来是独立卡片） -->
 
   <!-- Collapsible Data Sources -->
   <details class="price-details" id="srcDetails">
@@ -700,7 +674,8 @@
       distTitle: '用量分布', distHint: '范围内各维度 token 占比 · 前 5 项',
       wkTitle: '分时活跃', wkHint: '星期 × 小时 · 仅含小时粒度来源',
       thTime: '时间', unpriced: '未定价', distOther: '其他', devOther: '其他',
-      projTitle: '项目分布', projHint: '按总 token 排序 · 点击行可筛选项目 · 项目名按来源原样展示（同名项目可能拆分或合并显示）', thProject: '项目',
+      projTitle: '项目分布', projHint: '按总 token 排序 · 点击行展开该项目的会话 · 项目名按来源原样展示（同名项目可能拆分或合并显示）', thProject: '项目',
+      projFilterOn: '只看该项目', projFilterOff: '取消只看该项目',
       thAgent: 'Agent', thSessions: '会话', thDays: '天数', thEvents: '活动',
       thSource: '数据来源', thHasTokens: 'Token', thHasCost: '成本', thNote2: '说明',
 
@@ -776,7 +751,8 @@
       distTitle: 'Distribution', distHint: 'Token share per dimension in range · top 5',
       wkTitle: 'Activity by Hour', wkHint: 'Weekday × hour · sources with hour granularity only',
       thTime: 'Time', unpriced: 'Unpriced', distOther: 'Other', devOther: 'Other',
-      projTitle: 'Projects', projHint: 'Sorted by total tokens · click a row to filter · names are shown as each source reports them (a project may be split or merged)', thProject: 'Project',
+      projTitle: 'Projects', projHint: 'Sorted by total tokens · click a row to expand its sessions · names are shown as each source reports them (a project may be split or merged)', thProject: 'Project',
+      projFilterOn: 'Filter to this project', projFilterOff: 'Clear project filter',
       thAgent: 'Agent', thSessions: 'Sessions', thDays: 'Days', thEvents: 'Events',
       thSource: 'Source', thHasTokens: 'Tokens', thHasCost: 'Cost', thNote2: 'Note',
 
@@ -1850,6 +1826,8 @@
   }
 
   let projExpanded = false;
+  const expandedProjs = new Set();      // 展开中的项目（可同时展开多个）
+  const projSessAll = new Set();        // 该项目是否显示全部会话（否则只显示前 10）
   document.getElementById('projExpandBtn').addEventListener('click', () => { projExpanded = !projExpanded; renderProjects(); });
   function renderProjects() {
     const agg = aggProjects();
@@ -1859,8 +1837,9 @@
     document.querySelector('#projTable tbody').innerHTML = show.length
       ? show.map(([name, p]) => {
           const pct = grand > 0 ? ((p.tot / grand) * 100).toFixed(1) : '0.0';
-          return `<tr class="pj-row ${projSel === name ? 'on' : ''}" data-p="${esc(name)}" style="cursor:pointer">` +
-            `<td style="text-align:left;font-weight:600">${esc(name)}</td>` +
+          const open = expandedProjs.has(name);
+          const row = `<tr class="pj-row ${projSel === name ? 'on' : ''}" data-proj="${esc(name)}" aria-expanded="${open}" style="cursor:pointer">` +
+            `<td style="text-align:left;font-weight:600"><span class="pj-caret">${open ? '▾' : '▸'}</span>${esc(name)}</td>` +
             `<td>${[...p.agents].map(agentTag).join(' ')}</td>` +
             `<td><div class="td-progress"><div class="progress-bg"><div class="progress-bar" style="width:${pct}%"></div></div><span>${pct}%</span></div></td>` +
             `<td>${p.days.size}</td><td>${p.sess}</td>` +
@@ -1868,6 +1847,8 @@
             `<td>${p.ev ? fmt(p.ev) : '—'}</td>` +
             `<td style="color:var(--dim)">${costCell(p.hc ? p.cost : null, p.he ? p.est : null, p.tot > 0)}</td>` +
             `</tr>`;
+          // 展开行：该项目的会话明细（原来是独立的「会话明细」卡片）
+          return open ? row + `<tr class="proj-expand"><td colspan="8">${projSessionsHtml(name)}</td></tr>` : row;
         }).join('')
       : `<tr><td colspan="8" style="text-align:left;color:var(--dim)">${S.noRangeRecords}</td></tr>`;
     const pBtn = document.getElementById('projExpandBtn');
@@ -1879,10 +1860,33 @@
     }
   }
   document.getElementById('projTable').addEventListener('click', e => {
+    // 展开区内的控件先处理：只看该项目 / 会话展开全部 / 复制会话 ID
+    const fb = e.target.closest('button[data-filter-proj]');
+    if (fb) {
+      projSel = projSel === fb.dataset.filterProj ? 'all' : fb.dataset.filterProj;
+      onAgentChange();
+      return;
+    }
+    const sa = e.target.closest('button[data-sessall]');
+    if (sa) {
+      const n = sa.dataset.sessall;
+      if (projSessAll.has(n)) projSessAll.delete(n); else projSessAll.add(n);
+      renderProjects();
+      return;
+    }
+    const cp = e.target.closest('.btn-copy');
+    if (cp) {
+      const id = cp.dataset.id;
+      navigator.clipboard.writeText(id).then(() => showToast(S.copied))
+        .catch(() => prompt('Copy Session ID:', id));
+      return;
+    }
+    // 点行 = 展开/收起该项目的会话明细（原来的"点行筛选项目"改由展开区按钮触发）
     const tr = e.target.closest('tr.pj-row');
     if (!tr) return;
-    projSel = projSel === tr.dataset.p ? 'all' : tr.dataset.p;
-    onAgentChange();
+    const name = tr.dataset.proj;
+    if (expandedProjs.has(name)) expandedProjs.delete(name); else expandedProjs.add(name);
+    renderProjects();
   });
 
   // ---------- Distribution donuts ----------
@@ -2050,102 +2054,74 @@
         ).join('');
   }
 
-  // ---------- Sessions ----------
-  let sessSort = 'total';
-  let sessSearch = '';
-  let sessExpanded = false;
-  const sessSortEl = document.getElementById('sessSort');
-  const sessSearchEl = document.getElementById('sessSearch');
-  const sessExpandBtn = document.getElementById('sessExpandBtn');
-
-  sessSortEl.addEventListener('change', e => { sessSort = e.target.value; renderSessions(); });
-  sessSearchEl.addEventListener('input', e => { sessSearch = e.target.value.trim().toLowerCase(); renderSessions(); });
-  sessExpandBtn.addEventListener('click', () => { sessExpanded = !sessExpanded; renderSessions(); });
-
-  function renderSessions() {
-    // 会话级没有按模型的 token 拆分，筛选时明示总计口径，避免与其它面板数字对不上
-    document.getElementById('sessHint').textContent =
-      S.sessionHint + (selModel === 'all' ? '' : ' · ' + S.sessionModelNote);
-    let list = (D.sessions || []).slice();
-    // 跟随时间范围：与 Agent 表的"会话"列同口径（按最后活动日归属范围）。
-    // 没有 lastActivity 的会话无法判断归属，保留而不丢弃
-    list = list.filter(s => {
+  // ---------- Sessions（并入「项目分布」的行展开区） ----------
+  // 不再是独立卡片：点项目行展开该项目的会话，口径与项目表的「会话」列一致
+  function projSessions(name) {
+    return (D.sessions || []).filter(s => {
+      if (s.project !== name) return false;
+      if (agentSel !== 'all' && s.agent !== agentSel) return false;
+      if (selModel !== 'all' && !(s.modelsUsed || []).some(modelMatch)) return false;
+      // 跟随时间范围：与 Agent 表的"会话"列同口径（按最后活动日归属范围）。
+      // 没有 lastActivity 的会话无法判断归属，保留而不丢弃
       const day = (s.lastActivity || '').slice(0, 10);
       return !day || (day >= rangeStart && day <= rangeEnd);
-    });
-    if (agentSel !== 'all') list = list.filter(s => s.agent === agentSel);
-    if (selModel !== 'all') list = list.filter(s => (s.modelsUsed || []).some(modelMatch));
-    if (projSel !== 'all') list = list.filter(s => s.project === projSel);
-    if (sessSearch) {
-      list = list.filter(s => s.sessionId.toLowerCase().includes(sessSearch) ||
-        (s.project || '').toLowerCase().includes(sessSearch) ||
-        s.agent.toLowerCase().includes(sessSearch) ||
-        agentLabel(s.agent).toLowerCase().includes(sessSearch) ||
-        (s.modelsUsed || []).some(m => m.toLowerCase().includes(sessSearch)));
-    }
-    if (sessSort === 'cost') {
-      list.sort((a, b) => (b.costUsd ?? b.costEst ?? 0) - (a.costUsd ?? a.costEst ?? 0));
-    } else if (sessSort === 'net') {
-      list.sort((a, b) => (b.inputTokens + b.outputTokens) - (a.inputTokens + a.outputTokens));
-    } else {
-      list.sort((a, b) => (b.totalTokens - a.totalTokens) || ((b.events || 0) - (a.events || 0)));
-    }
-
-    const totalCount = list.length;
-    const displayList = sessExpanded ? list : list.slice(0, 10);
-    const tbody = document.querySelector('#sessionTable tbody');
-    if (!displayList.length) {
-      tbody.innerHTML = `<tr><td colspan="8" style="text-align:left;color:var(--dim);padding:14px 10px;">${S.noSessionsFound}</td></tr>`;
-      sessExpandBtn.style.display = 'none';
-      sessExpandBtn.textContent = S.showMore.replace('{n}', 0);   // 不留 {n} 模板占位
-      return;
-    }
-
-    tbody.innerHTML = displayList.map(s => {
-      const shortId = s.sessionId.replace(/^session_/, '').slice(0, 10);
-      const net = s.inputTokens + s.outputTokens;
-      const tot = s.totalTokens || 1;
-      const pIn = Math.min(100, Math.round((s.inputTokens / tot) * 100));
-      const pOut = Math.min(100 - pIn, Math.round((s.outputTokens / tot) * 100));
-      const pCr = Math.max(0, 100 - pIn - pOut);
-      const modelsHtml = (s.modelsUsed || []).map(m => `<span class="model-tag">${esc(m)}</span>`).join('');
-      const isEv = !s.totalTokens;
-      const day = (s.lastActivity || '').slice(0, 10);
-      return `<tr>` +
-        `<td style="text-align:left">` +
-          `<span class="sess-id" title="${esc(s.sessionId)}">${esc(shortId)}…</span>` +
-          `<button class="btn-copy" data-id="${esc(s.sessionId)}">${S.copyBtn}</button>` +
-          (s.project ? `<span class="sess-proj">${esc(s.project)}</span>` : '') +
-          (day ? `<span class="sess-date">${esc(day)}</span>` : '') +
-        `</td>` +
-        `<td>${agentTag(s.agent)}</td>` +
-        `<td style="text-align:left">${modelsHtml}</td>` +
-        `<td>${isEv ? `<span class="ev-tag">${fmt(s.events || 0)}${S.evUnit}</span>` :
-          `<div class="mini-bar" title="In:${pIn}% Out:${pOut}% Cache:${pCr}%">` +
-          `<span style="width:${pIn}%;background:${C.input}"></span>` +
-          `<span style="width:${pOut}%;background:${C.output}"></span>` +
-          `<span style="width:${pCr}%;background:${C.cacheRead}"></span></div>`}</td>` +
-        `<td>${isEv ? '—' : fmt(net)}</td>` +
-        `<td>${isEv ? '—' : fmt(s.cacheReadTokens)}</td>` +
-        `<td><b>${isEv ? '—' : fmt(s.totalTokens)}</b></td>` +
-        `<td style="color:var(--dim)">${costCell(s.costUsd, s.costEst, s.totalTokens > 0)}</td>` +
-        `</tr>`;
-    }).join('');
-
-    if (totalCount > 10) {
-      sessExpandBtn.style.display = 'inline-block';
-      sessExpandBtn.textContent = sessExpanded ? S.showLess : S.showMore.replace('{n}', totalCount);
-    } else {
-      sessExpandBtn.style.display = 'none';
-    }
+    }).sort((a, b) => (b.totalTokens - a.totalTokens) || ((b.events || 0) - (a.events || 0)));
   }
 
-  document.getElementById('sessionTable').addEventListener('click', e => {
-    const b = e.target.closest('.btn-copy');
-    if (!b) return;
-    const id = b.dataset.id;
-    navigator.clipboard.writeText(id).then(() => showToast(S.copied)).catch(() => prompt('Copy Session ID:', id));
-  });
+  function sessRowHtml(s) {
+    const shortId = s.sessionId.replace(/^session_/, '').slice(0, 10);
+    const net = s.inputTokens + s.outputTokens;
+    const tot = s.totalTokens || 1;
+    const pIn = Math.min(100, Math.round((s.inputTokens / tot) * 100));
+    const pOut = Math.min(100 - pIn, Math.round((s.outputTokens / tot) * 100));
+    const pCr = Math.max(0, 100 - pIn - pOut);
+    const modelsHtml = (s.modelsUsed || []).map(m => `<span class="model-tag">${esc(m)}</span>`).join('');
+    const isEv = !s.totalTokens;
+    const day = (s.lastActivity || '').slice(0, 10);
+    return `<tr class="sess-row">` +
+      `<td style="text-align:left">` +
+        `<span class="sess-id" title="${esc(s.sessionId)}">${esc(shortId)}…</span>` +
+        `<button class="btn-copy" data-id="${esc(s.sessionId)}">${S.copyBtn}</button>` +
+        (day ? `<span class="sess-date">${esc(day)}</span>` : '') +
+      `</td>` +
+      `<td>${agentTag(s.agent)}</td>` +
+      `<td style="text-align:left">${modelsHtml}</td>` +
+      `<td>${isEv ? `<span class="ev-tag">${fmt(s.events || 0)}${S.evUnit}</span>` :
+        `<div class="mini-bar" title="In:${pIn}% Out:${pOut}% Cache:${pCr}%">` +
+        `<span style="width:${pIn}%;background:${C.input}"></span>` +
+        `<span style="width:${pOut}%;background:${C.output}"></span>` +
+        `<span style="width:${pCr}%;background:${C.cacheRead}"></span></div>`}</td>` +
+      `<td>${isEv ? '—' : fmt(net)}</td>` +
+      `<td>${isEv ? '—' : fmt(s.cacheReadTokens)}</td>` +
+      `<td><b>${isEv ? '—' : fmt(s.totalTokens)}</b></td>` +
+      `<td style="color:var(--dim)">${costCell(s.costUsd, s.costEst, s.totalTokens > 0)}</td>` +
+      `</tr>`;
+  }
+
+  /** 项目行展开区：该项目的会话明细（超过 10 条时给"展开全部"） */
+  function projSessionsHtml(name) {
+    const list = projSessions(name);
+    if (!list.length) {
+      return `<div class="sess-wrap"><div class="hint">${S.noSessionsFound}</div></div>`;
+    }
+    const all = projSessAll.has(name);
+    const shown = all ? list : list.slice(0, 10);
+    const cols = ['thSessionId', 'thAgent', 'thModels', 'thBreakdown',
+                  'thNet', 'thCacheRead', 'thTotal', 'thCost'];
+    return `<div class="sess-wrap">` +
+      // 会话级没有按模型的 token 拆分，模型筛选下明示总计口径，避免与其它面板对不上
+      (selModel === 'all' ? '' : `<div class="hint">${S.sessionModelNote}</div>`) +
+      `<table class="sess-inner"><thead><tr>` +
+      cols.map(k => `<th>${S[k]}</th>`).join('') +
+      `</tr></thead><tbody>${shown.map(sessRowHtml).join('')}</tbody></table>` +
+      (list.length > 10
+        ? `<div class="expand-row"><button class="btn-expand" data-sessall="${esc(name)}">` +
+          (all ? S.showLess : S.showMore.replace('{n}', list.length)) + `</button></div>`
+        : '') +
+      `<div class="expand-row"><button class="btn-expand" data-filter-proj="${esc(name)}">` +
+      (projSel === name ? S.projFilterOff : S.projFilterOn) + `</button></div>` +
+      `</div>`;
+  }
 
   // ---------- Collect warnings ----------
   function renderWarnings() {
@@ -2182,11 +2158,8 @@
     renderDist();
     renderAgents();
     renderModels(days);
-    renderProjects();
+    renderProjects();      // 项目表内含展开区的会话明细，一并刷新
     renderWeekHeat();
-    // 会话表与按月汇总也必须在这里刷新：预设按钮与日期查询的点击路径只调用
-    // renderAgentBar() + renderRange()，漏掉这两个会让它们停留在上一次筛选的数据上
-    renderSessions();
     renderMonthly();
     syncUrl();
   }
@@ -2361,7 +2334,6 @@
   renderHeat();
   renderBarLegend();
   renderMonthly();
-  renderSessions();
   renderSources();
   renderRange();
 
@@ -2377,7 +2349,6 @@
     renderHeat();
     renderBarLegend();
     renderMonthly();
-    renderSessions();
     renderSources();
     document.getElementById('dailyHint').textContent = hasTok ? S.dailyHint : S.dailyHintE;
     document.getElementById('kpiTotalTitle').textContent = hasTok ? S.kpiTotal : S.kpiEvents;
