@@ -23,7 +23,7 @@ All data stays on your machine — the only network calls are optional read-only
 
 ¹ Cursor does not record token counts in local logs. The collector fetches your own usage CSV from `cursor.com` using the login token stored locally by the Cursor app (read-only GET; set `USAGE_DASH_CURSOR_API=0` to disable, `USAGE_DASH_CURSOR_TIMEOUT` for seconds). If the token is expired or the network is down, it falls back to local activity counts. Subscription "Included" rows have no dollar cost, so cost shows `—`.
 
-² Sources without recorded cost get an **estimated** cost marked `≈$`, computed from the [models.dev](https://models.dev) price list (the same open database OpenCode uses — `input`/`output`/`cache_read`/`cache_write` per MTok). The collector fetches `models.dev/api.json` once and caches it in `.cache/` for 24h (set `USAGE_DASH_PRICES=0` to disable, `USAGE_DASH_PRICES_TIMEOUT` for seconds). Internal models with no public price (e.g. `swe-2-*`, `composer-*`) stay `—`. Estimates are a reference, not actual charges.
+² Sources without recorded cost get an **estimated** cost marked `≈$`, computed from the [models.dev](https://models.dev) price list (the same open database OpenCode uses — `input`/`output`/`cache_read`/`cache_write` per MTok). The collector fetches `models.dev/api.json` once and caches it in `.cache/` for 24h (set `USAGE_DASH_PRICES=0` to disable, `USAGE_DASH_PRICES_TIMEOUT` for seconds). Internal models with no public price (e.g. `swe-2-*`, `composer-*`) are marked "Unpriced". When several providers list the same model, the first-party vendor's price wins. A row with both recorded and estimated cost shows their sum, prefixed with `≈` whenever any estimate is included. Estimates are a reference, not actual charges.
 
 > `~/.claude/projects` on this machine only contains `dimcode-mirror` / `commandcode-mirror` files — those are skipped to avoid double counting; the authoritative sources are read instead.
 
@@ -36,9 +36,8 @@ All data stays on your machine — the only network calls are optional read-only
 - **Activity heatmap**: GitHub-style, trailing one year (token / cost / activity modes), plus a weekday × hour activity grid for hour-granular sources
 - **Distribution**: donut charts for Agent / Model / Project token share (top 5 + other)
 - **Daily token breakdown**: stacked bars (fresh input / output / cache read / cache write); switches to hourly granularity when the selected range is exactly one day
-- **Records table**: hourly usage rows (time / agent / model / project / input / output / cache / cost) — only native parsers provide hour granularity; ccusage sources are day-granular; models without a public price are marked "Unpriced"
 - **Per-model usage table**: with agent attribution and USD cost
-- **Monthly summary**, **session explorer** (per-agent, per-model, per-project, searchable), and a **data sources** card
+- **Monthly summary**, **session explorer** (per-agent, per-model, per-project, searchable, with last-activity date), and a **data sources** card
 - **Time range filter**: today / 7 / 14 / 30 days / all / custom; all selections survive refresh via URL params (`a`, `m`, `pj`, `p`, `s`, `e`)
 - **Bilingual**: 中文 / English toggle
 

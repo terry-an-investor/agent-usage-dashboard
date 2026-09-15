@@ -23,7 +23,7 @@
 
 ¹ Cursor 不在本地日志记录 token。采集器用 Cursor 应用本地存储的登录态，从 cursor.com **只读拉取**你自己的用量 CSV（设 `USAGE_DASH_CURSOR_API=0` 可禁用，`USAGE_DASH_CURSOR_TIMEOUT` 调整秒数）。登录态失效或断网时自动降级为本地活动量统计。订阅制 "Included" 行没有美元成本，费用列显示 `—`。
 
-² 无记账成本的来源显示 `≈$` **估算成本**，按 [models.dev](https://models.dev) 价目表计算（OpenCode 同款开源数据库，含 input / output / cache_read / cache_write 每百万 token 价格）。采集器每次刷新拉取 `models.dev/api.json` 并缓存到 `.cache/` 24 小时（`USAGE_DASH_PRICES=0` 可禁用，`USAGE_DASH_PRICES_TIMEOUT` 调整秒数）。无公开价格的内部模型（如 `swe-2-*`、`composer-*`）仍显示 `—`。估算值仅供参考，不是实际扣费。
+² 无记账成本的来源显示 `≈$` **估算成本**，按 [models.dev](https://models.dev) 价目表计算（OpenCode 同款开源数据库，含 input / output / cache_read / cache_write 每百万 token 价格）。采集器每次刷新拉取 `models.dev/api.json` 并缓存到 `.cache/` 24 小时（`USAGE_DASH_PRICES=0` 可禁用，`USAGE_DASH_PRICES_TIMEOUT` 调整秒数）。无公开价格的内部模型（如 `swe-2-*`、`composer-*`）标注「未定价」。同一模型被多个 provider 收录时优先采信一手厂商报价；同一行既有记账成本又有估算成本时两者相加，只要含估算就带 `≈` 前缀。估算值仅供参考，不是实际扣费。
 
 > 本机 `~/.claude/projects` 里全是 `dimcode-mirror` / `commandcode-mirror` 镜像文件 —— 为避免重复计数已跳过，直接读原始数据源。
 
@@ -36,9 +36,8 @@
 - **活跃度热力图**：最近一年，GitHub 风格（token / 费用 / 活动量三种口径）；下方附「分时活跃」星期 × 小时网格
 - **用量分布**：Agent / 模型 / 项目 三个环形图（token 占比 Top 5 + 其他）
 - **每日 Token 构成**：堆叠柱状图（新输入 / 输出 / 缓存读取 / 缓存写入）；范围恰为一天时自动切换为逐小时粒度
-- **详细记录表**：小时粒度用量（时间 / Agent / 模型 / 项目 / 输入 / 输出 / 缓存 / 成本）—— 仅原生解析来源有小时粒度，ccusage 来源为日粒度；无公开价目的模型标注「未定价」
 - **模型用量表**：带 Agent 归属与 USD 成本
-- **按月汇总**、**会话明细**（可按 Agent / 模型 / 项目筛选与搜索）、**数据来源说明卡**
+- **按月汇总**、**会话明细**（可按 Agent / 模型 / 项目筛选与搜索，含最后活动日期）、**数据来源说明卡**
 - **时间范围筛选**：今日 / 近 7 / 14 / 30 日 / 全部 / 自定义区间；所有筛选刷新后保持（URL 参数 `a`/`m`/`pj`/`p`/`s`/`e`）
 - **中英双语**：右上角一键切换
 

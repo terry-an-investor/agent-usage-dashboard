@@ -262,6 +262,7 @@
     font-size: 11.5px; color: var(--text-secondary); background: #f1f5f9; padding: 2px 5px; border-radius: 4px;
   }
   .sess-proj { display: block; font-size: 10.5px; color: var(--faint); margin-top: 2px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sess-date { display: block; font-size: 10.5px; color: var(--faint); margin-top: 2px; }
   .btn-copy {
     border: 1px solid var(--border); background: #fff; color: var(--dim); border-radius: 5px;
     padding: 1.5px 6px; font-size: 10.5px; font-weight: 500; cursor: pointer; font-family: inherit; margin-left: 4px;
@@ -625,36 +626,6 @@
     </div>
   </div>
 
-  <!-- Hourly Detail Records -->
-  <div class="card">
-    <div class="card-head">
-      <div>
-        <h2 data-i18n="recTitle">详细记录</h2>
-        <div class="hint" data-i18n="recHint">小时粒度用量 · 仅含原生解析来源（ccusage 来源仅日粒度）</div>
-      </div>
-    </div>
-    <div class="table-scroll" tabindex="0"><table id="recTable" style="margin-top:12px;">
-      <thead>
-        <tr>
-          <th data-i18n="thTime" style="text-align:left;">时间</th>
-          <th data-i18n="thAgent">Agent</th>
-          <th data-i18n="thModel" style="text-align:left;">模型</th>
-          <th data-i18n="thProject" style="text-align:left;">项目</th>
-          <th data-i18n="thInput">输入</th>
-          <th data-i18n="thOutput">输出</th>
-          <th data-i18n="thCacheRead">缓存读取</th>
-          <th data-i18n="thTotal">总计</th>
-          <th data-i18n="thEvents">活动</th>
-          <th data-i18n="thCost">估算成本</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table></div>
-    <div class="expand-row" id="recExpandRow">
-      <button class="btn-expand" id="recExpandBtn" data-i18n="showMore">展开更多</button>
-    </div>
-  </div>
-
   <!-- Collapsible Data Sources -->
   <details class="price-details" id="srcDetails">
     <summary>
@@ -728,7 +699,6 @@
       agentUsage: 'Agent 用量', agentHint: '各 Agent 在范围内的用量汇总 · 点击行可快速筛选',
       distTitle: '用量分布', distHint: '范围内各维度 token 占比 · 前 5 项',
       wkTitle: '分时活跃', wkHint: '星期 × 小时 · 仅含小时粒度来源',
-      recTitle: '详细记录', recHint: '小时粒度用量 · 仅含原生解析来源（ccusage 来源仅日粒度）',
       thTime: '时间', unpriced: '未定价', distOther: '其他', devOther: '其他',
       projTitle: '项目分布', projHint: '按总 token 排序 · 点击行可筛选项目', thProject: '项目',
       thAgent: 'Agent', thSessions: '会话', thDays: '天数', thEvents: '活动',
@@ -805,7 +775,6 @@
       agentUsage: 'Agent Usage', agentHint: 'Usage per agent in range · click a row to filter',
       distTitle: 'Distribution', distHint: 'Token share per dimension in range · top 5',
       wkTitle: 'Activity by Hour', wkHint: 'Weekday × hour · sources with hour granularity only',
-      recTitle: 'Records', recHint: 'Hourly usage · native parsers only (ccusage sources are day-granular)',
       thTime: 'Time', unpriced: 'Unpriced', distOther: 'Other', devOther: 'Other',
       projTitle: 'Projects', projHint: 'Sorted by total tokens · click a row to filter', thProject: 'Project',
       thAgent: 'Agent', thSessions: 'Sessions', thDays: 'Days', thEvents: 'Events',
@@ -849,7 +818,9 @@
     },
   };
 
-  let lang = localStorage.getItem('agent-dash-lang') === 'en' ? 'en' : 'zh';
+  let lang = 'zh';
+  // localStorage 在禁用存储/沙箱 iframe 下会抛 SecurityError，不能让它中断整个脚本
+  try { lang = localStorage.getItem('agent-dash-lang') === 'en' ? 'en' : 'zh'; } catch (e) {}
   let S = I18N[lang];
 
   function applyStatic() {
@@ -897,21 +868,37 @@
     if (n >= 1e4) return (n / 1e3).toFixed(0) + 'K';
     return n.toLocaleString('en-US');
   }
+  // 只认自有属性：`k in obj` 会命中原型链（?m=constructor 会让筛选"有效"但整盘无数据）
+  const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const dayNum = ds => Date.UTC(+ds.slice(0, 4), +ds.slice(5, 7) - 1, +ds.slice(8, 10)) / 86400000;
   const sum = (arr, f) => arr.reduce((s, x) => s + f(x), 0);
+  // 纯日期算术：一律以"天序号"为基准。new Date('YYYY-MM-DD') 按 UTC 解析，
+  // 而 getDate()/iso() 按本地时区取值，两者混用会让日期整体错位一天（UTC 以西时区实测）
+  const isoOf = t => new Date(t * 86400000).toISOString().slice(0, 10);
+  const shiftDay = (ds, n) => isoOf(dayNum(ds) + n);
+  const mondayIdx = t => (new Date(t * 86400000).getUTCDay() + 6) % 7;   // 周一 = 0
   const fmtCost = c => !Number.isFinite(c) ? '—' : '$' + (c >= 100 ? c.toFixed(0) : c.toFixed(2));
   const fmtCostOr = c => c == null ? '—' : fmtCost(c);
-  // 记账成本与价目估算的统一渲染：$x = 来源记账；≈$x = models.dev 价目估算；未定价 = 无可用价目
-  const costCell = (rec, est, hasTok) => rec != null ? fmtCost(rec)
-    : (est != null ? `<span class="est-cost" title="${S.estCostSrc}">≈${fmtCost(est)}</span>`
-           : (hasTok ? `<span class="unpriced">${S.unpriced}</span>` : '—'));
+  // 成本统一口径：记账成本与价目估算来自不同来源，可以同时存在，必须相加而不是二选一。
+  // 按天/按行二选一会让"同一天既有记账又有估算"时的估算部分被静默丢弃。
+  // 渲染：纯记账 = $x；含估算 = ≈$x；无任何价目 = 未定价 / —
+  const costCell = (rec, est, hasTok) => {
+    if (rec == null && est == null) {
+      return hasTok ? `<span class="unpriced">${S.unpriced}</span>` : '—';
+    }
+    const total = (rec || 0) + (est || 0);
+    return est == null ? fmtCost(total)
+      : `<span class="est-cost" title="${S.estCostSrc}">≈${fmtCost(total)}</span>`;
+  };
+  // 单条记录（日/小时行）的实际成本 = 记账 + 估算
+  const recCost = rec => !rec ? 0 : (rec.costUsd || 0) + (rec.costEst || 0);
 
   const AGENTS = Object.fromEntries((D.agents || []).map(a => [a.id, a]));
   const agentLabel = id => (AGENTS[id] && AGENTS[id].label) || id;
   const agentColor = id => (AGENTS[id] && AGENTS[id].color) || '#64748b';
   const agentTag = id =>
-    `<span class="agent-tag"><span class="cdot" style="background:${agentColor(id)}"></span>${esc(agentLabel(id))}</span>`;
+    `<span class="agent-tag"><span class="cdot" style="background:${esc(agentColor(id))}"></span>${esc(agentLabel(id))}</span>`;
 
   const C = { input: '#4f46e5', output: '#059669', cacheRead: '#38bdf8', cacheCreation: '#f59e0b', cost: '#6366f1', events: '#0ea5e9' };
 
@@ -965,9 +952,48 @@
   let viewRows = [];                    // agent+project 过滤后的源行（供 Agent 表等复用）
 
   function rebuildView() {
-    const src = (projSel === 'all' ? rawDaily : rawProjDaily)
+    // 注意按"项目"而不是按"agent"判断：cursor 这类来源既有项目级日粒度（cursor.com 等），
+    // 又会用会话兜底产出别的项目（如 cursor cloud agent）。按 agent 判断会把后者一并排除掉。
+    const projectsWithDaily = new Set(rawProjDaily.map(r => r.project));
+    let src = (projSel === 'all' ? rawDaily : rawProjDaily)
       .filter(r => (agentSel === 'all' || r.agent === agentSel) &&
                    (projSel === 'all' || r.project === projSel));
+    // 有些项目只存在于会话记录里（ccusage 来源没有项目级日粒度，见 aggProjects 的兜底），
+    // 它们同样出现在项目下拉中。若不补近似数据，选中后整个面板会归零。
+    // 这里用会话总量近似，口径与 aggProjects 一致。
+    if (projSel !== 'all' && !src.length) {
+      const sess = (D.sessions || []).filter(s => {
+        if (s.project !== projSel) return false;
+        if (agentSel !== 'all' && s.agent !== agentSel) return false;
+        if (projectsWithDaily.has(s.project)) return false;   // 已有项目级日粒度，避免重复计
+        if (selModel === 'all') return true;
+        // 模型级无法从一个多模型会话里拆分出来：只在"整个会话就用一个模型"时归属，
+        // 否则宁可不显示，避免把用量全算到某一个模型头上（与 aggProjects 同口径）
+        const mus = s.modelsUsed || [];
+        return mus.length === 1 && modelMatch(mus[0]);
+      });
+      src = sess.map(s => {
+        const mus = s.modelsUsed || [];
+        const single = selModel !== 'all' && mus.length === 1;
+        return {
+          date: (s.lastActivity || '').slice(0, 10) || todayStr,
+          agent: s.agent, project: s.project,
+          inputTokens: s.inputTokens || 0, outputTokens: s.outputTokens || 0,
+          cacheReadTokens: s.cacheReadTokens || 0,
+          cacheCreationTokens: s.cacheCreationTokens || 0,
+          totalTokens: s.totalTokens || 0,
+          costUsd: s.costUsd ?? null, costEst: s.costEst ?? null,
+          events: s.events || 0,
+          // 单模型会话给出等量的 modelBreakdowns，否则留空（不虚构占比）
+          modelBreakdowns: single ? [{
+            modelName: mus[0], inputTokens: s.inputTokens || 0,
+            outputTokens: s.outputTokens || 0, cacheReadTokens: s.cacheReadTokens || 0,
+            cacheCreationTokens: s.cacheCreationTokens || 0,
+            cost: null, costEst: null, hasCost: false,
+          }] : [],
+        };
+      });
+    }
     viewRows = src;
     const map = {};
     for (const r of src) {
@@ -993,8 +1019,12 @@
           d.inputTokens += mb.inputTokens; d.outputTokens += mb.outputTokens;
           d.cacheReadTokens += mb.cacheReadTokens; d.cacheCreationTokens += mb.cacheCreationTokens || 0;
           d.totalTokens += mb.inputTokens + mb.outputTokens + mb.cacheReadTokens + (mb.cacheCreationTokens || 0);
-          if (mb.cost != null) mc = (mc || 0) + mb.cost;
-          if (mb.costEst != null) mce = (mce || 0) + mb.costEst;
+          // 必须用 hasCost：无记账成本的模型同样带 cost: 0，用 cost != null 判断
+          // 会把"没有记账成本"误当成"记账成本为 0"，进而让整个面板的成本口径变成$0
+          // 同一批 token 只能有一种成本口径：有记账成本就不再叠加估算，
+          // 否则模型表会把同一份用量既算 recorded 又算 estimated（合计超过 KPI）
+          if (mb.hasCost) mc = (mc || 0) + (mb.cost || 0);
+          else if (mb.costEst != null) mce = (mce || 0) + mb.costEst;
         }
         if (mc != null) d.costUsd = (d.costUsd || 0) + mc;
         if (mce != null) d.costEst = (d.costEst || 0) + mce;
@@ -1011,7 +1041,7 @@
         m.inputTokens += mb.inputTokens; m.outputTokens += mb.outputTokens;
         m.cacheReadTokens += mb.cacheReadTokens; m.cacheCreationTokens += mb.cacheCreationTokens || 0;
         if (mb.hasCost) { m.cost += mb.cost || 0; m.hc = true; }
-        if (mb.costEst != null) { m.costEst += mb.costEst; m.he = true; }
+        else if (mb.costEst != null) { m.costEst += mb.costEst; m.he = true; }
       }
     }
     daily = Object.values(map).sort((a, b) => a.date < b.date ? -1 : 1)
@@ -1147,7 +1177,7 @@
     agentSelEl.setAttribute('aria-label', S.agentFilter.trim());
     projSelEl.setAttribute('aria-label', S.projFilter.trim());
     if (!fillSelect(agentSelEl, agentSel,
-      [['all', S.allAgents], ...D.agents.map(a => [a.id, a.label])])) {
+      [['all', S.allAgents], ...(D.agents || []).map(a => [a.id, a.label])])) {
       agentSel = 'all'; agentSelEl.value = 'all'; reset = true;
     }
 
@@ -1176,7 +1206,8 @@
     }
     const devOrder = Object.keys(byDev).sort((a, b) =>
       byDev[b].reduce((s, n) => s + (mTot[n] || 0), 0) - byDev[a].reduce((s, n) => s + (mTot[n] || 0), 0));
-    if (!(selModel === 'all' || selModel in mAll || (selModel.startsWith('dev:') && selModel.slice(4) in byDev))) {
+    if (!(selModel === 'all' || hasOwn(mAll, selModel) ||
+          (selModel.startsWith('dev:') && hasOwn(byDev, selModel.slice(4))))) {
       selModel = 'all'; reset = true;
     }
     modelSelTxt.textContent = selModel === 'all' ? S.allModels
@@ -1189,7 +1220,7 @@
       if (agentSel === 'all' || r.agent === agentSel)
         pTot[r.project] = (pTot[r.project] || 0) + r.totalTokens + (r.events || 0);
     for (const s of D.sessions || [])
-      if ((agentSel === 'all' || s.agent === agentSel) && s.project && !(s.project in pTot))
+      if ((agentSel === 'all' || s.agent === agentSel) && s.project && !hasOwn(pTot, s.project))
         pTot[s.project] = s.totalTokens + (s.events || 0);
     const pItems = Object.entries(pTot).sort((a, b) => b[1] - a[1]).map(([n]) => [n, n]);
     if (!fillSelect(projSelEl, projSel, [['all', S.allProjects], ...pItems])) {
@@ -1275,8 +1306,10 @@
     const rTok = daily.some(d => inR(d) && d.totalTokens > 0);
     const rEv = daily.some(d => inR(d) && d.events > 0);
     hasTok = hasTokBase && (rTok || !rEv);
-    if (!hasTok) barMode = 'events';
-    else if (barMode === 'events') barMode = 'total';
+    // 切换模式必须走 setBarMode：它会同步 tab 高亮与图例。直接改 barMode 会让
+    // "按钮高亮费用($) / 图例写估算成本 / 实际画的是全量柱"三者不一致
+    if (!hasTok) setBarMode('events');
+    else if (barMode === 'events') setBarMode(lastTokenMode);
     document.getElementById('barModeTabs').style.display = hasTok ? '' : 'none';
     document.getElementById('heatMetricTabs').style.display = hasTok ? '' : 'none';
     document.getElementById('dailyHint').textContent = hasTok ? S.dailyHint : S.dailyHintE;
@@ -1292,9 +1325,9 @@
   function computeStreak() {
     curStreak = 0;
     const dateSet = new Set(daily.map(d => d.date));
-    const d = new Date(today);
-    if (!dateSet.has(iso(d))) d.setDate(d.getDate() - 1);
-    while (dateSet.has(iso(d))) { curStreak++; d.setDate(d.getDate() - 1); }
+    let t = dayNum(todayStr);
+    if (!dateSet.has(isoOf(t))) t -= 1;
+    while (dateSet.has(isoOf(t))) { curStreak++; t -= 1; }
   }
   function longestStreak(days) {
     let best = 0, run = 0, prev = null;
@@ -1309,20 +1342,21 @@
 
   // ---------- Heatmap ----------
   const HEAT = ['#ebedf0', '#bbf7d0', '#86efac', '#22c55e', '#15803d'];
-  const yearAgo = new Date(today); yearAgo.setDate(today.getDate() - 364);
-  const heatStart = new Date(yearAgo); heatStart.setDate(yearAgo.getDate() - ((yearAgo.getDay() + 6) % 7));
+  // 一律用天序号做日期算术，避免 new Date('YYYY-MM-DD') 的 UTC 解析与本地取值混用
+  const todayN = dayNum(todayStr);
+  const heatStartN = todayN - 364 - mondayIdx(todayN - 364);
   const weeks = [];
-  {
-    const d = new Date(heatStart);
-    while (d <= today) {
-      const wk = [];
-      for (let i = 0; i < 7; i++) { wk.push(d <= today ? iso(d) : null); d.setDate(d.getDate() + 1); }
-      weeks.push(wk);
+  for (let base = heatStartN; base <= todayN; base += 7) {
+    const wk = [];
+    for (let i = 0; i < 7; i++) {
+      const t = base + i;
+      wk.push(t <= todayN ? isoOf(t) : null);
     }
+    weeks.push(wk);
   }
 
   let heatMetric = 'tokens';
-  const dayCost = rec => rec ? (rec.costUsd ?? rec.costEst ?? 0) : 0;
+  const dayCost = recCost;
   const heatVal = rec => {
     if (!rec) return 0;
     if (!hasTok) return rec.events;
@@ -1381,7 +1415,7 @@
     renderHeatTitle();
     renderHeat();
   });
-  document.getElementById('heatRange').textContent = iso(heatStart) + ' ~ ' + todayStr;
+  document.getElementById('heatRange').textContent = isoOf(heatStartN) + ' ~ ' + todayStr;
   document.getElementById('legendSw').innerHTML =
     HEAT.map(c => `<span class="d" style="background:${c}"></span>`).join('');
 
@@ -1418,17 +1452,24 @@
     const out = sum(days, d => d.outputTokens);
     const cr = sum(days, d => d.cacheReadTokens);
     const ev = sum(days, d => d.events);
-    const nSess = agentSel === 'all'
-      ? new Set((D.sessions || []).map(s => s.agent + ':' + s.sessionId)).size
-      : (D.sessions || []).filter(s => s.agent === agentSel).length;
+    // 会话数必须与 Agent 表的"会话"列同口径（按 lastActivity 落范围 + agent/项目/模型），
+    // 否则同一屏会出现"KPI 78 个会话 / 表格 0 个"这种自相矛盾
+    const nSess = (D.sessions || []).filter(s => {
+      const day = (s.lastActivity || '').slice(0, 10);
+      if (day && (day < rangeStart || day > rangeEnd)) return false;
+      if (agentSel !== 'all' && s.agent !== agentSel) return false;
+      if (projSel !== 'all' && s.project !== projSel) return false;
+      if (selModel !== 'all' && !(s.modelsUsed || []).some(modelMatch)) return false;
+      return true;
+    }).length;
 
     // 上一等长周期
-    const pEnd = new Date(rangeStart); pEnd.setDate(pEnd.getDate() - 1);
-    const pStart = new Date(pEnd); pStart.setDate(pStart.getDate() - (spanDays - 1));
-    const prevDays = daily.filter(d => d.date >= iso(pStart) && d.date <= iso(pEnd));
+    const pEndS = shiftDay(rangeStart, -1);
+    const pStartS = shiftDay(pEndS, -(spanDays - 1));
+    const prevDays = daily.filter(d => d.date >= pStartS && d.date <= pEndS);
     const pTot = sum(prevDays, d => d.totalTokens);
     const pNet = sum(prevDays, d => d.inputTokens + d.outputTokens);
-    const pCost = sum(prevDays, d => d.costUsd ?? d.costEst ?? 0);
+    const pCost = sum(prevDays, recCost);
     const pHit = sum(prevDays, d => d.cacheReadTokens) /
       Math.max(sum(prevDays, d => d.cacheReadTokens) + sum(prevDays, d => d.inputTokens), 1);
 
@@ -1437,9 +1478,13 @@
     if (hasTok) {
       const net = inp + out;
       const hitRate = cr / Math.max(cr + inp, 1);
+      // 记账与估算分别汇总后相加（同一页面上 Agent 表也是这个口径）；
+      // 不能按天 `costUsd ?? costEst` 二选一，那会丢掉"同一天既有记账又有估算"的估算部分
+      const costRec = sum(days, d => d.costUsd || 0);
+      const costEst = sum(days, d => d.costEst || 0);
       const costKnown = days.some(d => d.costUsd != null);
-      const estKnown = !costKnown && days.some(d => d.costEst != null);
-      const cost = sum(days, d => d.costUsd ?? d.costEst ?? 0);
+      const estKnown = days.some(d => d.costEst != null);
+      const cost = costRec + costEst;
       const avgDaily = Math.round(tot / Math.max(days.length, 1));
       const rangeBestStreak = longestStreak(days);
 
@@ -1453,8 +1498,8 @@
         + (prevDays.length ? deltaSpan(hitRate, pHit, true) : '');
       document.getElementById('kpiCacheSub').innerHTML =
         `${S.nCacheRead} <b>${fmt(cr)}</b>`;
-      document.getElementById('kpiCostVal').innerHTML = (costKnown ? fmtCost(cost)
-        : (estKnown ? `<span class="est-cost" title="${S.estCostSrc}">≈${fmtCost(cost)}</span>` : '—'))
+      document.getElementById('kpiCostVal').innerHTML =
+        costCell(costKnown ? costRec : null, estKnown ? costEst : null)
         + ((costKnown || estKnown) ? deltaSpan(cost, pCost) : '');
       document.getElementById('kpiCostSub').innerHTML = (costKnown || estKnown)
         ? `${S.kpiAvgDaily} <b>${fmtCost(cost / Math.max(days.length, 1))}</b> · ${S.kpiStreakCur} <b>${curStreak} ${S.kpiDaysUnit}</b> (${S.kpiStreakMax} ${rangeBestStreak} ${S.kpiDaysUnit})`
@@ -1474,15 +1519,23 @@
 
   // ---------- Daily Bars ----------
   let barMode = 'total';
+  let lastTokenMode = 'total';   // 记住用户选过的 token 口径，从活动量模式切回时恢复它
   const barModeTabs = document.getElementById('barModeTabs');
+  // 唯一改 barMode 的入口：同时更新 tab 高亮/aria 与图例
+  function setBarMode(mode) {
+    barMode = mode;
+    if (mode !== 'events') lastTokenMode = mode;
+    document.querySelectorAll('#barModeTabs button').forEach(x => {
+      const on = x.dataset.bm === mode;
+      x.classList.toggle('on', on);
+      x.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    renderBarLegend();
+  }
   barModeTabs.addEventListener('click', e => {
     const b = e.target.closest('button');
     if (!b || b.dataset.bm === barMode) return;
-    barMode = b.dataset.bm;
-    document.querySelectorAll('#barModeTabs button').forEach(x => {
-      x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b);
-    });
-    renderBarLegend();
+    setBarMode(b.dataset.bm);
     renderBars();
   });
 
@@ -1529,13 +1582,13 @@
     }
     if (!buckets) {
       const days = [];
-      for (let d = new Date(rangeStart); d <= new Date(rangeEnd); d.setDate(d.getDate() + 1)) days.push(iso(d));
+      for (let t = dayNum(rangeStart), te = dayNum(rangeEnd); t <= te; t++) days.push(isoOf(t));
       buckets = days; recOf = dayRec; labOf = ds => ds.slice(5); keyOf = ds => ds;
     }
 
     const W = 680, H = 220, padL = 58, padR = 24, padB = 26, padT = 12;
     const plotW = W - padL - padR, plotH = H - padB - padT;
-    const dayCostOf = rec => !rec ? 0 : (rec.costUsd ?? rec.costEst ?? 0);
+    const dayCostOf = recCost;
 
     let maxVal = 1;
     if (!hasTok) {
@@ -1660,7 +1713,7 @@
           a.cc += mb.cacheCreationTokens || 0;
           a.tot += mb.inputTokens + mb.outputTokens + mb.cacheReadTokens + (mb.cacheCreationTokens || 0);
           if (mb.hasCost) { a.cost += mb.cost || 0; a.hc = true; }
-          if (mb.costEst != null) { a.est += mb.costEst; a.he = true; }
+          else if (mb.costEst != null) { a.est += mb.costEst; a.he = true; }
         }
       }
     }
@@ -1680,7 +1733,7 @@
           const m = AGENTS[id] || {};
           const pct = grand > 0 ? ((a.tot / grand) * 100).toFixed(1) : '0.0';
           const isEv = m.hasTokens === false;
-          return `<tr class="ag-row ${agentSel === id ? 'on' : ''}" data-a="${id}">` +
+          return `<tr class="ag-row ${agentSel === id ? 'on' : ''}" data-a="${esc(id)}">` +
             `<td style="text-align:left">${agentTag(id)}</td>` +
             `<td>${isEv ? '—' : `<div class="td-progress"><div class="progress-bg"><div class="progress-bar" style="width:${pct}%"></div></div><span>${pct}%</span></div>`}</td>` +
             `<td>${a.days.size}</td>` +
@@ -1706,7 +1759,9 @@
   function aggProjects() {
     const inRange = d => d >= rangeStart && d <= rangeEnd;
     const agg = {};
-    const agentsWithProj = new Set(rawProjDaily.map(r => r.agent));
+    // 与 rebuildView 同口径：按"项目"判断是否已有项目级日粒度，而不是按 agent
+    // （cursor 既有 cursor.com 的项目级数据，又有 cursor cloud agent 这类会话兜底项目）
+    const projectsWithDaily = new Set(rawProjDaily.map(r => r.project));
     for (const r of rawProjDaily) {
       if (!inRange(r.date)) continue;
       if (agentSel !== 'all' && r.agent !== agentSel) continue;
@@ -1725,7 +1780,7 @@
         for (const mb of mbs) {
           p.tot += mb.inputTokens + mb.outputTokens + mb.cacheReadTokens + (mb.cacheCreationTokens || 0);
           if (mb.hasCost) { p.cost += mb.cost || 0; p.hc = true; }
-          if (mb.costEst != null) { p.est += mb.costEst; p.he = true; }
+          else if (mb.costEst != null) { p.est += mb.costEst; p.he = true; }
         }
       }
     }
@@ -1743,8 +1798,8 @@
       }
       p.sess++;
       p.agents.add(s.agent);
-      if (!agentsWithProj.has(s.agent)) {
-        // ccusage 来源无项目级日粒度，用会话总量近似；模型筛选下仅当会话全部模型都命中才归属
+      if (!projectsWithDaily.has(s.project)) {
+        // 无项目级日粒度的来源用会话总量近似；模型筛选下仅当会话全部模型都命中才归属
         // （多模型会话无法拆出单模型份额，宁可不计也不虚高）
         if (selModel === 'all' || (s.modelsUsed || []).every(modelMatch)) {
           p.tot += s.totalTokens; p.ev += s.events || 0;
@@ -1807,12 +1862,12 @@
     let off = 0, segs = '';
     for (const it of top) {
       const len = (it.v / total) * C;
-      segs += `<circle r="${R}" cx="50" cy="50" fill="none" stroke="${it.color}" stroke-width="14" stroke-dasharray="${len} ${C - len}" stroke-dashoffset="${-off}"/>`;
+      segs += `<circle r="${R}" cx="50" cy="50" fill="none" stroke="${esc(it.color)}" stroke-width="14" stroke-dasharray="${len} ${C - len}" stroke-dashoffset="${-off}"/>`;
       off += len;
     }
     const lis = top.map(it => {
       const pct = (it.v / total * 100).toFixed(1);
-      return `<li><span class="dn-name"><span class="dn-dot" style="background:${it.color}"></span>${esc(it.name)}</span>` +
+      return `<li><span class="dn-name"><span class="dn-dot" style="background:${esc(it.color)}"></span>${esc(it.name)}</span>` +
         `<span class="dn-val">${fmt(it.v)} ${pct}%</span></li>`;
     }).join('');
     return `<div class="donut"><svg width="100" height="100" viewBox="0 0 100 100">` +
@@ -1863,7 +1918,9 @@
     }
     const max = Math.max(1, ...grid.flat());
     wkGrid = grid;
-    if (max === 1) { wrap.style.display = 'none'; return; }
+    // 只判断"是否全为 0"：max === 1 时网格里可能确有数据（某小时恰好 1 条事件），
+    // 一律隐藏会把有数据误判成无数据
+    if (!grid.some(row => row.some(v => v > 0))) { wrap.style.display = 'none'; return; }
     wrap.style.display = '';
     let h = '<div class="wk-lab"></div>';
     for (let i = 0; i < 24; i++) h += `<div class="wk-hour">${i % 6 === 0 ? i : ''}</div>`;
@@ -1887,37 +1944,6 @@
   let wkGrid = null;
   function wkVal(dow, hh) { return wkGrid ? wkGrid[dow][hh] : 0; }
 
-  // ---------- Hourly detail records ----------
-  let recExpanded = false;
-  document.getElementById('recExpandBtn').addEventListener('click', () => { recExpanded = !recExpanded; renderRecords(); });
-  function renderRecords() {
-    const rows = filteredHourly()
-      .filter(r => r.hour.slice(0, 10) >= rangeStart && r.hour.slice(0, 10) <= rangeEnd)
-      .sort((a, b) => b.hour.localeCompare(a.hour));
-    const show = recExpanded ? rows : rows.slice(0, 10);
-    document.querySelector('#recTable tbody').innerHTML = show.length
-      ? show.map(r =>
-          `<tr><td style="text-align:left;white-space:nowrap">${r.hour.slice(5, 10)} ${r.hour.slice(11)}:00</td>` +
-          `<td>${agentTag(r.agent)}</td>` +
-          `<td style="text-align:left">${r.model === '?' ? '—' : `<span class="model-tag">${esc(r.model)}</span>`}</td>` +
-          `<td style="text-align:left;color:var(--dim)">${esc(r.project || '—')}</td>` +
-          `<td>${r.inputTokens ? fmt(r.inputTokens) : '—'}</td>` +
-          `<td>${r.outputTokens ? fmt(r.outputTokens) : '—'}</td>` +
-          `<td>${r.cacheReadTokens ? fmt(r.cacheReadTokens) : '—'}</td>` +
-          `<td><b>${r.totalTokens ? fmt(r.totalTokens) : '—'}</b></td>` +
-          `<td>${r.events ? fmt(r.events) : '—'}</td>` +
-          `<td style="color:var(--dim)">${costCell(r.costUsd, r.costEst, r.totalTokens > 0)}</td></tr>`
-        ).join('')
-      : `<tr><td colspan="10" style="text-align:left;color:var(--dim)">${S.noRangeRecords}</td></tr>`;
-    const btn = document.getElementById('recExpandBtn');
-    if (rows.length > 10) {
-      btn.style.display = 'inline-block';
-      btn.textContent = recExpanded ? S.showLess : S.showMore.replace('{n}', rows.length);
-    } else {
-      btn.style.display = 'none';
-    }
-  }
-
   // ---------- Models table ----------
   function renderModels(days) {
     const models = {};
@@ -1929,8 +1955,11 @@
       m.input += mb.inputTokens; m.output += mb.outputTokens; m.cacheRead += mb.cacheReadTokens;
       const tot = mb.inputTokens + mb.outputTokens + mb.cacheReadTokens + (mb.cacheCreationTokens || 0);
       m.total += tot; grandTotal += tot;
-      if (mb.hasCost) { m.cost += mb.cost || 0; m.hc = true; }
-      if (mb.costEst != null) { m.costEst += mb.costEst; m.he = true; }
+      // mb 是 rebuildView 聚合出的对象（字段 hc/he），不是 data.js 的原始行：
+      // 用 mb.hasCost 会恒为 undefined、mb.costEst 又因初值为 0 而恒 "!= null"，
+      // 结果记账成本全丢、无价目模型全被显示成 ≈$0.00
+      if (mb.hc) { m.cost += mb.cost || 0; m.hc = true; }
+      if (mb.he) { m.costEst += mb.costEst || 0; m.he = true; }
     }));
     const rows = Object.entries(models).sort((a, b) => b[1].total - a[1].total);
     // 按开发商分组：组头行 + 组内按用量排序
@@ -1968,7 +1997,12 @@
       if (d.costEst != null) { m.est += d.costEst; m.he = true; }
     });
     const rows = Object.entries(byMonth);
-    document.querySelector('#monthTable tbody').innerHTML = hasTok
+    const mTbody = document.querySelector('#monthTable tbody');
+    if (!rows.length) {
+      mTbody.innerHTML = `<tr><td colspan="6" style="text-align:left;color:var(--dim)">${S.noRangeRecords}</td></tr>`;
+      return;
+    }
+    mTbody.innerHTML = hasTok
       ? rows.map(([k, m]) =>
           `<tr><td style="text-align:left;font-weight:600">${k}</td><td>${fmt(m.input)}</td><td>${fmt(m.output)}</td>` +
           `<td>${fmt(m.cacheRead)}</td><td><b>${fmt(m.total)}</b></td><td style="color:var(--dim)">${costCell(m.hc ? m.cost : null, m.he ? m.est : null)}</td></tr>`
@@ -1996,6 +2030,12 @@
     document.getElementById('sessHint').textContent =
       S.sessionHint + (selModel === 'all' ? '' : ' · ' + S.sessionModelNote);
     let list = (D.sessions || []).slice();
+    // 跟随时间范围：与 Agent 表的"会话"列同口径（按最后活动日归属范围）。
+    // 没有 lastActivity 的会话无法判断归属，保留而不丢弃
+    list = list.filter(s => {
+      const day = (s.lastActivity || '').slice(0, 10);
+      return !day || (day >= rangeStart && day <= rangeEnd);
+    });
     if (agentSel !== 'all') list = list.filter(s => s.agent === agentSel);
     if (selModel !== 'all') list = list.filter(s => (s.modelsUsed || []).some(modelMatch));
     if (projSel !== 'all') list = list.filter(s => s.project === projSel);
@@ -2020,6 +2060,7 @@
     if (!displayList.length) {
       tbody.innerHTML = `<tr><td colspan="8" style="text-align:left;color:var(--dim);padding:14px 10px;">${S.noSessionsFound}</td></tr>`;
       sessExpandBtn.style.display = 'none';
+      sessExpandBtn.textContent = S.showMore.replace('{n}', 0);   // 不留 {n} 模板占位
       return;
     }
 
@@ -2027,16 +2068,18 @@
       const shortId = s.sessionId.replace(/^session_/, '').slice(0, 10);
       const net = s.inputTokens + s.outputTokens;
       const tot = s.totalTokens || 1;
-      const pIn = Math.round((s.inputTokens / tot) * 100);
-      const pOut = Math.round((s.outputTokens / tot) * 100);
+      const pIn = Math.min(100, Math.round((s.inputTokens / tot) * 100));
+      const pOut = Math.min(100 - pIn, Math.round((s.outputTokens / tot) * 100));
       const pCr = Math.max(0, 100 - pIn - pOut);
       const modelsHtml = (s.modelsUsed || []).map(m => `<span class="model-tag">${esc(m)}</span>`).join('');
       const isEv = !s.totalTokens;
+      const day = (s.lastActivity || '').slice(0, 10);
       return `<tr>` +
         `<td style="text-align:left">` +
           `<span class="sess-id" title="${esc(s.sessionId)}">${esc(shortId)}…</span>` +
           `<button class="btn-copy" data-id="${esc(s.sessionId)}">${S.copyBtn}</button>` +
           (s.project ? `<span class="sess-proj">${esc(s.project)}</span>` : '') +
+          (day ? `<span class="sess-date">${esc(day)}</span>` : '') +
         `</td>` +
         `<td>${agentTag(s.agent)}</td>` +
         `<td style="text-align:left">${modelsHtml}</td>` +
@@ -2076,7 +2119,7 @@
 
   // ---------- Sources table ----------
   function renderSources() {
-    document.querySelector('#srcTable tbody').innerHTML = D.agents.map(a => {
+    document.querySelector('#srcTable tbody').innerHTML = (D.agents || []).map(a => {
       const note = !a.hasTokens ? S.noteEventsOnly : (a.hasCost ? S.noteTokenOk : S.noteTokenOnly);
       return `<tr>` +
         `<td style="text-align:left">${agentTag(a.id)}</td>` +
@@ -2093,7 +2136,7 @@
     renderHeatTitle();
     renderHeat();
     const days = daily.filter(d => d.date >= rangeStart && d.date <= rangeEnd);
-    const spanDays = dayNum(rangeEnd) - dayNum(rangeStart) + 1;
+    const spanDays = Math.max(1, dayNum(rangeEnd) - dayNum(rangeStart) + 1);
     document.getElementById('rangeLabel').textContent = `${S.rangeLabel}${rangeStart} ~ ${rangeEnd}`;
     document.getElementById('barRange').textContent = `${rangeStart} ~ ${rangeEnd}`;
     document.getElementById('agentRange').textContent = `${rangeStart} ~ ${rangeEnd}`;
@@ -2104,7 +2147,10 @@
     renderModels(days);
     renderProjects();
     renderWeekHeat();
-    renderRecords();
+    // 会话表与按月汇总也必须在这里刷新：预设按钮与日期查询的点击路径只调用
+    // renderAgentBar() + renderRange()，漏掉这两个会让它们停留在上一次筛选的数据上
+    renderSessions();
+    renderMonthly();
     syncUrl();
   }
 
@@ -2120,9 +2166,7 @@
     renderHeatTitle();
     renderHeat();
     renderBarLegend();
-    renderMonthly();
-    renderSessions();
-    renderRange();
+    renderRange();     // 内部会刷新会话表与按月汇总
   }
 
   // ---------- Custom Datepicker ----------
@@ -2203,8 +2247,8 @@
     if (p === 'all') { rangeStart = firstDate; rangeEnd = todayStr; }
     else if (p === 'today') { rangeStart = rangeEnd = todayStr; }
     else {
-      const d0 = new Date(today); d0.setDate(d0.getDate() - (+p - 1));
-      rangeStart = iso(d0) < firstDate ? firstDate : iso(d0);
+      const start = shiftDay(todayStr, -(+p - 1));
+      rangeStart = start < firstDate ? firstDate : start;
       rangeEnd = todayStr;
     }
     dStart.value = ''; dEnd.value = '';
@@ -2225,6 +2269,7 @@
     if (a > b) [a, b] = [b, a];
     if (a < firstDate) a = firstDate;
     if (b > todayStr) b = todayStr;
+    if (a > b) { a = firstDate; b = todayStr; }   // 钳制后倒序 → 退回全时段
     rangeStart = a; rangeEnd = b;
     activePreset = null;
     document.querySelectorAll('#presetTabs button').forEach(x => { x.classList.remove('on'); x.setAttribute('aria-pressed', 'false'); });
@@ -2237,8 +2282,8 @@
   computeStreak();
   computeMaxes();
   {
-    const d0 = new Date(today); d0.setDate(d0.getDate() - 6);
-    rangeStart = iso(d0) < firstDate ? firstDate : iso(d0);
+    const start = shiftDay(todayStr, -6);
+    rangeStart = start < firstDate ? firstDate : start;
   }
 
   {
@@ -2259,6 +2304,9 @@
       let x = s < e ? s : e, y = s < e ? e : s;
       if (x < firstDate) x = firstDate;
       if (y > todayStr) y = todayStr;
+      // 钳制后可能倒序（s、e 都早于 firstDate 或都晚于今天）→ 退回全时段。
+      // 否则 spanDays 变成负数，页面会显示"活跃天数 0/-2279 天"
+      if (x > y) { x = firstDate; y = todayStr; }
       rangeStart = x; rangeEnd = y;
       activePreset = null;
       dStart.value = x; dEnd.value = y;
@@ -2284,7 +2332,7 @@
   document.getElementById('langBtn').addEventListener('click', () => {
     lang = lang === 'zh' ? 'en' : 'zh';
     S = I18N[lang];
-    localStorage.setItem('agent-dash-lang', lang);
+    try { localStorage.setItem('agent-dash-lang', lang); } catch (e) {}
     applyStatic();
     renderGen();
     renderAgentBar();
@@ -2308,8 +2356,8 @@
       const r = await fetch('/refresh', { method: 'POST' });
       const body = await r.json();
       if (body.ok) {
-        showToast(lang === 'zh' ? '数据刷新成功' : 'Data refreshed');
-        setTimeout(() => location.reload(), 400);
+        // 直接重载：刷新完成后页面本来就该展示新数据，多等一拍只会让体感更慢
+        location.reload();
         return;
       }
       showToast(S.refreshFail + (body.log || '?'), true);

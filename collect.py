@@ -16,17 +16,20 @@
 注意：~/.claude/projects 下的文件全是 dimcode/commandcode 的 mirror，不计，避免重复。
 仅使用标准库；所有 sqlite 先复制到临时目录再读，避免锁/损坏正在使用的 WAL 库。
 """
-import glob
+import hashlib
 import json
 import os
+import pickle
 import re
 import shutil
 import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -95,6 +98,7 @@ def _norm_model(s):
 
 
 CANON_RAWS = {}   # canon -> {剥离强度后缀前的写法}：供输出前复核归并
+_canon_cache = {}  # 原始名 -> canon：同一模型名会被反复查询（实测 3.9 万次/次刷新）
 
 
 def canon_model(name):
@@ -103,6 +107,9 @@ def canon_model(name):
     claude-sonnet-4-5-20250929），统一收敛到 canonical key 以去重聚合"""
     if not name:
         return "?"
+    cached = _canon_cache.get(name)
+    if cached is not None:
+        return cached          # 同一写法必然得到同一 canon，CANON_RAWS 无需重复登记
     s = str(name).strip().lower()
     s = re.sub(r"^\[[^\]]+\]\s*", "", s)   # [pi] xxx
     s = s.rsplit("/", 1)[-1]               # provider/model -> model
@@ -116,26 +123,47 @@ def canon_model(name):
     # -high 结尾，如 swe-2-high），则还原原名，避免改名无中生有
     s = re.sub(r"(-(minimal|low|medium|high|xhigh))+$", "", s)
     if not s or s.isdigit():               # 退化结果（如 火山)-0 -> 0）视为无模型信息
+        _canon_cache[name] = "?"
         return "?"
-    CANON_RAWS.setdefault(s, set()).add(pre)
+    with _state_lock:                      # CANON_RAWS 会被所有采集线程写
+        CANON_RAWS.setdefault(s, set()).add(pre)
+    _canon_cache[name] = s
     return s
 
 
 def _build_price_map(raw):
-    """api.json -> {规范化模型ID: {in,out,cr,cw}}，同名取首个 provider 的价格"""
-    out = {}
-    for prov in raw.values():
+    """api.json -> {规范化模型ID: {in,out,cr,cw}}
+
+    同一模型名常同时出现在一手厂商与 openrouter 等聚合商下，价格可能相差数倍
+    （缓存实测 950 个多 provider 模型中有 599 个价格不同，如 o3 2.0 vs 10.0 USD/M），
+    因此优先一手厂商报价、聚合商兜底。
+
+    但 FIRST_PARTY_PROVIDERS 里还混着订阅/套餐 SKU（xxx-coding-plan / xxx-token-plan）
+    与纯转发 provider：它们的 cost 全为 0（表示"套餐内不按 token 计费"），若直接参与
+    "一手优先"会把真实单价覆盖成 0（实测 55 个模型被归零，如 deepseek-v4-pro、glm-5.2、
+    kimi-k3）。所以分四档按优先级合并：非零一手 > 非零其他 > 零一手 > 零其他。
+    """
+    buckets = {}   # (is_first, is_zero) -> {key: price}
+    for pk, prov in raw.items():
+        is_first = pk in FIRST_PARTY_PROVIDERS
         for mid, m in (prov.get("models") or {}).items():
             c = m.get("cost")
-            if c:
-                key = _norm_model(mid)
-                if key and key not in out:
-                    out[key] = {
-                        "in": float(c.get("input") or 0),
-                        "out": float(c.get("output") or 0),
-                        "cr": float(c.get("cache_read") or 0),
-                        "cw": float(c.get("cache_write") or 0),
-                    }
+            if not c:
+                continue
+            key = _norm_model(mid)
+            if not key:
+                continue
+            price = {
+                "in": float(c.get("input") or 0),
+                "out": float(c.get("output") or 0),
+                "cr": float(c.get("cache_read") or 0),
+                "cw": float(c.get("cache_write") or 0),
+            }
+            is_zero = not any(price.values())
+            buckets.setdefault((is_first, is_zero), {}).setdefault(key, price)
+    out = {}
+    for tier in ((False, True), (True, True), (False, False), (True, False)):
+        out.update(buckets.get(tier, {}))
     return out
 
 
@@ -244,21 +272,30 @@ def load_prices():
         return {}, {}
 
 
+_lookup_cache = {}   # (id(表), 模型名) -> 表项：最长包含匹配要遍历整表，缓存后省下重复扫描
+
+
 def _lookup_map(tbl, name):
     """模型名 -> 表项。依次尝试：规范化全名精确、basename 精确、最长包含匹配（防误判要求 >=6 字符）"""
     if not name or not tbl:
         return None
+    ck = (id(tbl), name)
+    if ck in _lookup_cache:
+        return _lookup_cache[ck]
     full = _norm_model(name)
     base = _norm_model(name.rsplit("/", 1)[-1])
     for cand in (full, base):
         if cand in tbl:
+            _lookup_cache[ck] = tbl[cand]
             return tbl[cand]
     best = None
     for cand in (full, base):
         for pid, p in tbl.items():
             if len(pid) >= 6 and pid in cand and (best is None or len(pid) > len(best[0])):
                 best = (pid, p)
-    return best[1] if best else None
+    res = best[1] if best else None
+    _lookup_cache[ck] = res
+    return res
 
 
 def price_of(prices, name):
@@ -267,21 +304,38 @@ def price_of(prices, name):
 
 
 def est_cost(prices, name, inp, out, cr, cc):
-    """按价目估算 USD 成本；无价目返回 None"""
+    """按价目估算 USD 成本；无价目**或无用量**时返回 None
+
+    没有用量时返回 None 而不是 0.0：否则前端会把"无 token 的行"渲染成 ≈$0.00，
+    与「未定价」语义混淆（例如 cursor cloud agent 会话只保留活动量之后）。
+    """
     p = price_of(prices, name)
     if p is None:
         return None
+    if not (inp or out or cr or cc):
+        return None
     return (inp * p["in"] + out * p["out"] + cr * p["cr"] + cc * p["cw"]) / 1e6
+
+
+def _model_bucket():
+    return {
+        "inputTokens": 0, "outputTokens": 0, "cacheReadTokens": 0,
+        "cacheCreationTokens": 0, "cost": 0.0, "hasCost": False,
+    }
 
 
 def _bucket():
     return {
         "inputTokens": 0, "outputTokens": 0, "cacheReadTokens": 0,
         "cacheCreationTokens": 0, "totalTokens": 0, "costUsd": 0.0,
-        "costKnown": False, "events": 0, "models": defaultdict(lambda: {
-            "inputTokens": 0, "outputTokens": 0, "cacheReadTokens": 0,
-            "cacheCreationTokens": 0, "cost": 0.0, "hasCost": False,
-        }),
+        "costKnown": False, "events": 0, "models": defaultdict(_model_bucket),
+    }
+
+
+def _hourly_bucket():
+    return {
+        "inputTokens": 0, "outputTokens": 0, "cacheReadTokens": 0,
+        "cacheCreationTokens": 0, "costUsd": 0.0, "costKnown": False, "events": 0,
     }
 
 
@@ -289,30 +343,42 @@ def _bucket():
 daily_rows = defaultdict(_bucket)
 proj_rows = defaultdict(_bucket)   # 仅原生解析器可产出项目级用量
 # hourly_rows[(hourStr, agent, model, project)] -> 小时粒度桶（详细记录/分时活跃用）
-hourly_rows = defaultdict(lambda: {
-    "inputTokens": 0, "outputTokens": 0, "cacheReadTokens": 0,
-    "cacheCreationTokens": 0, "costUsd": 0.0, "costKnown": False, "events": 0,
-})
+hourly_rows = defaultdict(_hourly_bucket)
 sessions = []          # 会话级记录
 seen_session = set()   # (agent, sessionId) 去重
 agent_found = {}       # agent -> 统计信息
 warnings = []
 
+# 各来源现在并行采集（见 main），以下共享状态必须串行化：
+# dict/list 的"读-改-写"（如 b["inputTokens"] += x）在 CPython 下不是原子操作，
+# 并发写会丢数据。解析是 CPU 密集、加锁点都在单次累加上，锁开销可忽略。
+_state_lock = threading.RLock()
+
+
+_date_re = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
 
 def day_of_ts(ts):
-    """epoch 秒或毫秒 -> 本地日期 YYYY-MM-DD"""
-    if ts > 1e12:
-        ts /= 1000.0
-    return datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
+    """epoch 秒或毫秒 -> 本地日期 YYYY-MM-DD；无法解析时返回 None（调用方跳过）"""
+    try:
+        if not ts:                  # None / 0：0 会被当成 1970-01-01 污染全站日期轴
+            return None
+        ts = float(ts)
+        if ts > 1e12:
+            ts /= 1000.0
+        return datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
 
 
 def day_of_iso(s):
-    """ISO 时间串 -> 本地日期"""
+    """ISO 时间串 -> 本地日期；解析失败只在形如 YYYY-MM-DD 时兜底，否则返回 None"""
     try:
-        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(str(s).replace("Z", "+00:00"))
         return dt.astimezone().strftime("%Y-%m-%d")
     except Exception:
-        return s[:10]
+        head = str(s or "")[:10]
+        return head if _date_re.match(head) else None
 
 
 def hour_of_iso(s):
@@ -331,84 +397,117 @@ def hour_of_ts(ts):
 
 
 def _fresh(inp, cr):
-    """部分来源 inputTokens 含 cacheRead（commandcode/dimcode/devin/kimix），
-    归一化为 ccusage 口径：input = 未命中缓存的新输入，cacheRead 单列"""
+    """部分来源的 inputTokens 含 cacheRead（commandcode/dimcode/kimix），
+    归一化为 ccusage 口径：input = 未命中缓存的新输入，cacheRead 单列。
+
+    注意 devin 与 antigravity 的 input 本身不含 cacheRead，不要对它们调用本函数
+    （实测 devin 95.7% 的事件 cache_read_tokens > input_tokens）。
+    """
     return max(0, (inp or 0) - (cr or 0))
 
 
 def _accum(rows, key, inp=0, out=0, cr=0, cc=0, cost=None,
-           model=None, m_inp=0, m_out=0, m_cr=0, m_cc=0, m_cost=None,
+           model=None, m_inp=None, m_out=None, m_cr=None, m_cc=None, m_cost=None,
            events=0):
     b = rows[key]
-    b["inputTokens"] += inp
-    b["outputTokens"] += out
-    b["cacheReadTokens"] += cr
-    b["cacheCreationTokens"] += cc
-    b["totalTokens"] += inp + out + cr + cc
-    if cost is not None:
-        b["costUsd"] += cost
-        b["costKnown"] = True
-    if events:
-        b["events"] += events
-    if model:
-        mb = b["models"][canon_model(model)]
-        mb["inputTokens"] += (m_inp or inp)
-        mb["outputTokens"] += (m_out or out)
-        mb["cacheReadTokens"] += (m_cr or cr)
-        mb["cacheCreationTokens"] += (m_cc or cc)
-        if m_cost is not None:
-            mb["cost"] += m_cost
-            mb["hasCost"] = True
-        elif cost is not None:
-            mb["cost"] += cost
-            mb["hasCost"] = True
+    with _state_lock:
+        b["inputTokens"] += inp
+        b["outputTokens"] += out
+        b["cacheReadTokens"] += cr
+        b["cacheCreationTokens"] += cc
+        b["totalTokens"] += inp + out + cr + cc
+        if cost is not None:
+            b["costUsd"] += cost
+            b["costKnown"] = True
+        if events:
+            b["events"] += events
+        if model:
+            mb = b["models"][canon_model(model)]
+            # m_* 为 None 表示"未单独给出该模型的量"，回退到行级总量；
+            # 不能用 `x or y`，否则显式传 0（该模型确实为 0）会被当成缺失
+            mb["inputTokens"] += inp if m_inp is None else m_inp
+            mb["outputTokens"] += out if m_out is None else m_out
+            mb["cacheReadTokens"] += cr if m_cr is None else m_cr
+            mb["cacheCreationTokens"] += cc if m_cc is None else m_cc
+            if m_cost is not None:
+                mb["cost"] += m_cost
+                mb["hasCost"] = True
+            elif cost is not None:
+                mb["cost"] += cost
+                mb["hasCost"] = True
+
+
+_bad_date_seen = set()
+
+
+def _warn_bad_date(agent, date):
+    """日期无法解析时告警（同一 agent+日期只报一次，避免刷屏）"""
+    key = (agent, str(date))
+    with _state_lock:
+        if key in _bad_date_seen:
+            return
+        _bad_date_seen.add(key)
+        warnings.append(f"跳过日期无法解析的 {agent} 记录: date={date!r}")
 
 
 def add_usage(date, agent, project=None, hour=None, **kw):
-    """写入日粒度 + 项目粒度 + 小时粒度三个桶（后两者需要相应上下文）"""
+    """写入日粒度 + 项目粒度 + 小时粒度三个桶（后两者需要相应上下文）。
+
+    返回是否写入成功。日期非法时返回 False，调用方必须据此跳过同一事件的
+    会话累加，否则会出现"会话里有、日粒度里没有"（会话之和 > 日之和）。
+    """
+    if not date or not _date_re.match(str(date)):
+        _warn_bad_date(agent, date)
+        return False
     _accum(daily_rows, (date, agent), **kw)
     if project:
         _accum(proj_rows, (date, agent, project), **kw)
     if hour is not None:
-        hb = hourly_rows[(f"{date} {hour:02d}", agent,
-                          canon_model(kw.get("model")), project or "")]
-        hb["inputTokens"] += kw.get("inp") or 0
-        hb["outputTokens"] += kw.get("out") or 0
-        hb["cacheReadTokens"] += kw.get("cr") or 0
-        hb["cacheCreationTokens"] += kw.get("cc") or 0
-        if kw.get("cost") is not None:
-            hb["costUsd"] += kw["cost"]
-            hb["costKnown"] = True
-        hb["events"] += kw.get("events") or 0
+        with _state_lock:
+            hb = hourly_rows[(f"{date} {hour:02d}", agent,
+                              canon_model(kw.get("model")), project or "")]
+            hb["inputTokens"] += kw.get("inp") or 0
+            hb["outputTokens"] += kw.get("out") or 0
+            hb["cacheReadTokens"] += kw.get("cr") or 0
+            hb["cacheCreationTokens"] += kw.get("cc") or 0
+            if kw.get("cost") is not None:
+                hb["costUsd"] += kw["cost"]
+                hb["costKnown"] = True
+            hb["events"] += kw.get("events") or 0
+    return True
 
 
 def add_session(agent, sid, project="", last="", models=None,
                 inp=0, out=0, cr=0, cc=0, cost=None, events=0):
     key = (agent, sid)
-    if key in seen_session:
-        return
-    seen_session.add(key)
-    sessions.append({
-        "sessionId": sid, "agent": agent, "project": project,
-        "lastActivity": last,
-        "modelsUsed": sorted({canon_model(m) for m in (models or [])}),
-        "inputTokens": inp, "outputTokens": out,
-        "cacheReadTokens": cr, "cacheCreationTokens": cc,
-        "totalTokens": inp + out + cr + cc,
-        "costUsd": cost, "events": events,
-    })
+    with _state_lock:
+        if key in seen_session:
+            return
+        seen_session.add(key)
+        sessions.append({
+            "sessionId": sid, "agent": agent, "project": project,
+            "lastActivity": last,
+            "modelsUsed": sorted({canon_model(m) for m in (models or [])}),
+            "inputTokens": inp, "outputTokens": out,
+            "cacheReadTokens": cr, "cacheCreationTokens": cc,
+            "totalTokens": inp + out + cr + cc,
+            "costUsd": cost, "events": events,
+        })
 
 
 def mark(agent, **kw):
-    a = agent_found.setdefault(agent, {"sessions": 0, "days": set()})
-    a.update({k: v for k, v in kw.items() if v is not None})
+    with _state_lock:
+        a = agent_found.setdefault(agent, {"sessions": 0, "days": set()})
+        a.update({k: v for k, v in kw.items() if v is not None})
 
 
 # ---------------------------------------------------------------- ccusage
-def collect_ccusage():
+def _ccusage_raw():
+    """跑一次 ccusage 拿原始 JSON 文本（None = 不可用）。
+    单独抽出来是因为它的输出既是指纹的一部分，也是缓存未命中时的必需输入。"""
     if not CCUSAGE.exists():
         warnings.append("ccusage 未安装（node_modules/.bin/ccusage 不存在），跳过 kimi/codex 等来源")
-        return
+        return None
     try:
         r = subprocess.run(
             [str(CCUSAGE), "daily", "--json", "--offline",
@@ -416,10 +515,22 @@ def collect_ccusage():
             capture_output=True, text=True, timeout=600, cwd=str(DIR))
         if r.returncode != 0:
             warnings.append(f"ccusage 执行失败: {r.stderr.strip()[:300]}")
-            return
-        data = json.loads(r.stdout)
+            return None
+        return r.stdout
     except Exception as e:
         warnings.append(f"ccusage 异常: {e}")
+        return None
+
+
+def collect_ccusage(raw=None):
+    if raw is None:
+        raw = _ccusage_raw()
+    if raw is None:
+        return
+    try:
+        data = json.loads(raw)
+    except Exception as e:
+        warnings.append(f"ccusage 输出解析失败: {e}")
         return
 
     agents_seen = set()
@@ -427,7 +538,10 @@ def collect_ccusage():
     # daily[]: {period, agents:[{agent, tokens..., totalCost, modelBreakdowns[]}]}
     for row in data.get("daily") or []:
         date = row.get("period") or row.get("date")
-        if not date:
+        if not date or not _date_re.match(str(date)):
+            # 这里会直接写 daily_rows[...]["models"]，绕过 add_usage 的守卫，
+            # 必须在整行处理前拦掉，否则会留下"0 token 但有 modelBreakdowns"的日行
+            _warn_bad_date("ccusage", date)
             continue
         for ag in row.get("agents") or []:
             agent = ag.get("agent") or "unknown"
@@ -440,14 +554,15 @@ def collect_ccusage():
                 cr=ag.get("cacheReadTokens", 0), cc=ag.get("cacheCreationTokens", 0),
                 cost=ag.get("totalCost"))
             for mb in models:
-                b = daily_rows[(date, agent)]["models"][canon_model(mb.get("modelName"))]
-                b["inputTokens"] += mb.get("inputTokens", 0)
-                b["outputTokens"] += mb.get("outputTokens", 0)
-                b["cacheReadTokens"] += mb.get("cacheReadTokens", 0)
-                b["cacheCreationTokens"] += mb.get("cacheCreationTokens", 0)
-                if mb.get("cost") is not None:
-                    b["cost"] += mb["cost"]
-                    b["hasCost"] = True
+                with _state_lock:
+                    b = daily_rows[(date, agent)]["models"][canon_model(mb.get("modelName"))]
+                    b["inputTokens"] += mb.get("inputTokens", 0)
+                    b["outputTokens"] += mb.get("outputTokens", 0)
+                    b["cacheReadTokens"] += mb.get("cacheReadTokens", 0)
+                    b["cacheCreationTokens"] += mb.get("cacheCreationTokens", 0)
+                    if mb.get("cost") is not None:
+                        b["cost"] += mb["cost"]
+                        b["hasCost"] = True
 
     # session[]: {agent, period=sessionId, metadata{projectPath,lastActivity}, ...}
     for s in data.get("session") or []:
@@ -478,8 +593,14 @@ def collect_commandcode():
             continue
         sid = fp.stem
         project = fp.parent.name
-        # 项目目录名 users-zhaozhoubin-xxx-yyy -> 取最后一段可读化
-        proj_short = project.split("-")[-1] if project.startswith("users-") else project
+        # 项目目录名是扁平化的绝对路径（users-zhaozhoubin-myprojects-agent-usage-dashboard）。
+        # 只取最后一段会把不同项目压成同一个标签（实测 13 个目录撞成 11 个：
+        # agent-usage-dashboard 与 kimi-usage-dashboard 都成了 "dashboard"，
+        # market-data 与 trading-logic-wt-data 都成了 "data"），
+        # 因此只剥掉 users-<用户名>- 前缀，其余原样保留以保证可区分
+        parts = project.split("-")
+        proj_short = ("~/" + "-".join(parts[2:])
+                      if project.startswith("users-") and len(parts) > 2 else project)
         tot = {"i": 0, "o": 0, "cr": 0, "cc": 0, "cost": 0.0, "has_cost": False}
         models_used = set()
         last_ts = ""
@@ -510,11 +631,13 @@ def collect_commandcode():
                     tot["i"] += _fresh(inp, cr); tot["o"] += out; tot["cr"] += cr; tot["cc"] += cc
                     if cost is not None:
                         tot["cost"] += cost; tot["has_cost"] = True
-                    add_usage(date, "commandcode", project=proj_short,
-                              hour=hour_of_iso(ts),
-                              inp=_fresh(inp, cr), out=out,
-                              cr=cr, cc=cc, cost=cost, model=model)
-        except Exception:
+                    if not add_usage(date, "commandcode", project=proj_short,
+                                     hour=hour_of_iso(ts),
+                                     inp=_fresh(inp, cr), out=out,
+                                     cr=cr, cc=cc, cost=cost, model=model):
+                        continue   # 日期非法：不要只进会话汇总
+        except Exception as e:
+            warnings.append(f"commandcode 解析失败（该文件剩余行已跳过）: {fp.name}: {e}")
             continue
         if found and (tot["i"] or tot["o"] or tot["cr"]):
             add_session("commandcode", sid, project=proj_short,
@@ -526,8 +649,28 @@ def collect_commandcode():
 
 
 def _copy_db(src, tmpdir, name):
-    """复制 sqlite（含 wal/shm）到临时目录再读，避免锁正在使用的库"""
+    """把 sqlite 复制到临时目录再读，避免锁正在使用的库。
+
+    优先用 sqlite3 的 backup API 拿一致快照（逐页复制，含 WAL 中已提交的事务）；
+    只读打开失败（如 WAL 库在只读模式下的 -shm 限制）时回退为文件复制，
+    此时必须把 -wal/-shm 一起复制，否则会读到旧快照。
+    """
     dst = Path(tmpdir) / name
+    if dst.exists():
+        dst.unlink()
+    try:
+        sc = sqlite3.connect(f"file:{src}?mode=ro", uri=True)
+        try:
+            dc = sqlite3.connect(str(dst))
+            try:
+                sc.backup(dc)
+            finally:
+                dc.close()
+        finally:
+            sc.close()
+        return dst
+    except Exception:
+        pass
     shutil.copy2(src, dst)
     for ext in ("-wal", "-shm"):
         if os.path.exists(str(src) + ext):
@@ -536,13 +679,28 @@ def _copy_db(src, tmpdir, name):
 
 
 # ---------------------------------------------------------------- dimcode
+def _open_ro(src, tmpdir, name):
+    """只读打开 sqlite：优先直接打开原库，失败才复制到临时目录。
+
+    只读连接不取写锁、不修改源库；WAL 模式下读者看到的是一致快照，
+    因此可以安全地直读正在被使用的库，省掉整个库的复制（实测 devin 433MB 省 0.38s、
+    dimcode 386MB 省 0.35s）。只有在直读受限时（如 -shm 不可写）才回退到复制。
+    """
+    try:
+        con = sqlite3.connect(f"file:{src}?mode=ro", uri=True)
+        con.execute("SELECT 1").fetchone()      # connect 是惰性的，这里真正打开一次
+        return con
+    except Exception:
+        pass
+    return sqlite3.connect(f"file:{_copy_db(src, tmpdir, name)}?mode=ro", uri=True)
+
+
 def collect_dimcode(tmpdir):
     src = HOME / ".dimcode" / "v2" / "dimcode.sqlite"
     if not src.exists():
         return
     try:
-        db = _copy_db(src, tmpdir, "dimcode.sqlite")
-        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        con = _open_ro(src, tmpdir, "dimcode.sqlite")
         con.row_factory = sqlite3.Row
         proj = {}
         try:
@@ -569,11 +727,12 @@ def collect_dimcode(tmpdir):
                 inp, out = r["inputTokens"] or 0, r["outputTokens"] or 0
                 cr, cc = r["cacheReadTokens"] or 0, r["cacheWriteTokens"] or 0
                 p = proj.get(sid, "")
-                add_usage(date, "dimcode",
-                          project="/".join(p.split("/")[-2:]) if p else "",
-                          hour=hour_of_iso(r["endedAt"] or ""),
-                          inp=_fresh(inp, cr), out=out, cr=cr,
-                          cc=cc, cost=cost, model=model)
+                if not add_usage(date, "dimcode",
+                                 project="/".join(p.split("/")[-2:]) if p else "",
+                                 hour=hour_of_iso(r["endedAt"] or ""),
+                                 inp=_fresh(inp, cr), out=out, cr=cr,
+                                 cc=cc, cost=cost, model=model):
+                    continue   # 日期非法：不要只进会话汇总
                 a = agg.setdefault(sid, {"i": 0, "o": 0, "cr": 0, "cc": 0,
                                          "cost": 0.0, "hc": False,
                                          "models": set(), "last": ""})
@@ -606,16 +765,16 @@ def collect_devin(tmpdir):
     if not src.exists():
         return
     try:
-        db = _copy_db(src, tmpdir, "devin.db")
-        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        con = _open_ro(src, tmpdir, "devin.db")
         con.row_factory = sqlite3.Row
         sess_meta = {}
         for r in con.execute("SELECT id, working_directory, model FROM sessions"):
             sess_meta[r["id"]] = {"wd": r["working_directory"] or "",
                                   "model": r["model"] or "?"}
         agg = {}
+        seen_turn = set()
         found = False
-        for r in con.execute("SELECT session_id, chat_message, created_at"
+        for r in con.execute("SELECT row_id, session_id, chat_message, created_at"
                              " FROM message_nodes"):
             cm = r["chat_message"]
             if '"metrics"' not in cm:
@@ -624,34 +783,63 @@ def collect_devin(tmpdir):
                 o = json.loads(cm)
             except Exception:
                 continue
-            m = (o.get("metadata") or {}).get("metrics") or {}
+            md = o.get("metadata") or {}
+            m = md.get("metrics") or {}
             inp = m.get("input_tokens") or 0
             out = m.get("output_tokens") or 0
             if not inp and not out:
                 continue
+            sid = r["session_id"] or "?"
+            # 同一轮推理的 message 会在 message_nodes 里重复落库（实测多为 2 份，
+            # 少量 3 份），按 message_id/request_id 去重，否则用量成倍虚增
+            turn = (sid, o.get("message_id") or md.get("request_id")
+                    or str(r["row_id"]))
+            if turn in seen_turn:
+                continue
+            seen_turn.add(turn)
             found = True
             cr = m.get("cache_read_tokens") or 0
             cc = m.get("cache_creation_tokens") or 0
-            sid = r["session_id"] or "?"
             model = sess_meta.get(sid, {}).get("model", "?")
-            date = day_of_ts(r["created_at"] or 0)
+            # 真实发生时间在 chat_message.metadata.created_at；message_nodes.created_at
+            # 会被会话重载整体改写（一次批量写入把历史节点覆盖成同一分钟），
+            # 只能作为兜底，否则整段历史用量都会堆到重载那一刻
+            dt = None
+            ts_iso = md.get("created_at") or md.get("started_generation_at")
+            if ts_iso:
+                try:
+                    dt = datetime.fromisoformat(
+                        ts_iso.replace("Z", "+00:00")).astimezone()
+                except Exception:
+                    dt = None
+            if dt is not None:
+                date, hour, last = dt.strftime("%Y-%m-%d"), dt.hour, dt.isoformat()
+            else:
+                raw = r["created_at"] or 0
+                raw = raw / 1000 if raw > 1e12 else raw
+                date, hour = day_of_ts(raw), hour_of_ts(raw)
+                last = datetime.fromtimestamp(raw).astimezone().isoformat() if raw else ""
             wd = sess_meta.get(sid, {}).get("wd", "")
-            add_usage(date, "devin",
-                      project="/".join(wd.split("/")[-2:]) if wd else "",
-                      hour=hour_of_ts(r["created_at"] or 0),
-                      inp=_fresh(inp, cr), out=out, cr=cr, cc=cc,
-                      model=model)
+            # devin 的 metrics.input_tokens 已经是"未命中缓存的新输入"（实测 95.7% 的
+            # 事件 cache_read_tokens > input_tokens，若 input 含 cacheRead 则不可能），
+            # 因此不能再套 _fresh，否则绝大多数行的 input 会被 clamp 成 0
+            if not add_usage(date, "devin",
+                             project="/".join(wd.split("/")[-2:]) if wd else "",
+                             hour=hour,
+                             inp=inp, out=out, cr=cr, cc=cc,
+                             model=model):
+                continue   # 日期非法：不要只进会话汇总
             a = agg.setdefault(sid, {"i": 0, "o": 0, "cr": 0, "cc": 0,
-                                     "models": set(), "last": 0})
-            a["i"] += _fresh(inp, cr); a["o"] += out; a["cr"] += cr; a["cc"] += cc
+                                     "models": set(), "last": ""})
+            a["i"] += inp; a["o"] += out; a["cr"] += cr; a["cc"] += cc
             a["models"].add(model)
-            a["last"] = max(a["last"], r["created_at"] or 0)
+            if last > a["last"]:
+                a["last"] = last
         for sid, a in agg.items():
             wd = sess_meta.get(sid, {}).get("wd", "")
-            last = a["last"] / 1000 if a["last"] > 1e12 else a["last"]
             add_session("devin", sid,
                         project="/".join(wd.split("/")[-2:]) if wd else "",
-                        last=datetime.fromtimestamp(last).isoformat() if last else "",
+                        last=a["last"],
                         models=sorted(a["models"]),
                         inp=a["i"], out=a["o"], cr=a["cr"], cc=a["cc"])
         if found:
@@ -690,19 +878,23 @@ def collect_kimix():
                     proj = "/".join(proj.split("/")[-2:])
                     mu = u.get("modelUsage") or {}
                     hr = hour_of_ts(ts)
+                    wrote = True
                     if mu:
                         for model, mm in mu.items():
                             mcr = mm.get("cachedReadTokens") or 0
                             kw = dict(inp=_fresh(mm.get("inputTokens") or 0, mcr),
                                       out=mm.get("outputTokens") or 0,
                                       cr=mcr, cc=0, model=model)
-                            add_usage(date, "kimix", project=proj, hour=hr, **kw)
+                            wrote = add_usage(date, "kimix", project=proj,
+                                              hour=hr, **kw) and wrote
                     else:
                         ucr = u.get("cachedReadTokens") or 0
                         kw = dict(inp=_fresh(u.get("inputTokens") or 0, ucr),
                                   out=u.get("outputTokens") or 0,
                                   cr=ucr, cc=0)
-                        add_usage(date, "kimix", project=proj, hour=hr, **kw)
+                        wrote = add_usage(date, "kimix", project=proj, hour=hr, **kw)
+                    if not wrote:
+                        continue   # 日期非法：不要只进会话汇总
                     a = agg.setdefault(sid, {"i": 0, "o": 0, "cr": 0,
                                              "models": set(), "last": 0})
                     a["i"] += _fresh(u.get("inputTokens") or 0,
@@ -711,7 +903,8 @@ def collect_kimix():
                     a["cr"] += u.get("cachedReadTokens") or 0
                     a["models"].update(mu.keys() or ["?"])
                     a["last"] = max(a["last"], ts)
-        except Exception:
+        except Exception as e:
+            warnings.append(f"kimix 解析失败（该文件剩余行已跳过）: {fp.name}: {e}")
             continue
         proj = "/".join(fp.parent.parent.name.replace("%2F", "/").split("/")[-2:])
         for sid, a in agg.items():
@@ -725,21 +918,75 @@ def collect_kimix():
 
 
 # ----------------------------------------------------------------- cursor
+CURSOR_CACHE = DIR / ".cache" / "cursor-usage.csv"
+
+
+def _cursor_fetch_csv(tmpdir):
+    """从 cursor.com 拉一次用量 CSV（只读自己的账户）。失败时写 warnings 并返回 None。"""
+    import urllib.request
+    tok, sub = _cursor_access_token(tmpdir)
+    if not tok:
+        return None
+    timeout = int(os.environ.get("USAGE_DASH_CURSOR_TIMEOUT", "90"))
+    url = "https://cursor.com/api/dashboard/export-usage-events-csv?strategy=tokens"
+    uid = sub.split("|")[-1] if "|" in sub else None
+    cookies = [c for c in (f"{sub}%3A%3A{tok}" if sub else "",
+                           f"{uid}%3A%3A{tok}" if uid else "",
+                           tok) if c]
+    base_headers = {
+        "Accept": "text/csv,*/*;q=0.8",
+        "Origin": "https://cursor.com",
+        "Referer": "https://cursor.com/dashboard?tab=usage",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                      "AppleWebKit/537.36",
+    }
+    for cv in cookies + [None]:
+        headers = dict(base_headers)
+        if cv:
+            headers["Cookie"] = f"WorkosCursorSessionToken={cv}"
+        else:
+            headers["Authorization"] = f"Bearer {tok}"
+        try:
+            r = urllib.request.urlopen(
+                urllib.request.Request(url, headers=headers), timeout=timeout)
+            return r.read().decode("utf-8", "replace")
+        except urllib.error.HTTPError as e:
+            if e.code not in (401, 403):
+                warnings.append(f"cursor 用量导出 HTTP {e.code}，仅显示本地活动量")
+                return None
+        except Exception:
+            warnings.append("cursor 用量导出网络失败，仅显示本地活动量")
+            return None
+    warnings.append("cursor 登录态失效（在 Cursor 中重新登录后可恢复 token 统计），"
+                    "仅显示本地活动量")
+    return None
+
+
 def _cursor_access_token(tmpdir):
-    """从 Cursor 的 state.vscdb 读登录态（只读，复制后查询防锁）"""
+    """从 Cursor 的 state.vscdb 读登录态（只读）"""
     import base64
     src = (HOME / "Library" / "Application Support" / "Cursor" / "User"
            / "globalStorage" / "state.vscdb")
     if not src.exists():
         return None, None
+
+    def _read(path):
+        con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        try:
+            return con.execute("SELECT value FROM ItemTable"
+                               " WHERE key='cursorAuth/accessToken'").fetchone()
+        finally:
+            con.close()
+
+    row = None
     try:
-        db = _copy_db(src, tmpdir, "cursor-state.vscdb")
-        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
-        row = con.execute("SELECT value FROM ItemTable"
-                          " WHERE key='cursorAuth/accessToken'").fetchone()
-        con.close()
+        # 直接只读打开原库：这是一张 KV 表，不需要一致快照，可省掉复制 500MB（约 0.45s）
+        row = _read(src)
     except Exception:
-        return None, None
+        try:                              # 只读打开受限（如 WAL 的 -shm 不可写）时回退到复制
+            row = _read(_copy_db(src, tmpdir, "cursor-state.vscdb"))
+        except Exception:
+            return None, None
     tok = (row[0] or "").strip() if row else ""
     if not tok:
         return None, None
@@ -754,49 +1001,35 @@ def _cursor_access_token(tmpdir):
 
 def collect_cursor_api(tmpdir):
     """拉取 cursor.com 用量 CSV（只读自己的账户数据）。
-    USAGE_DASH_CURSOR_API=0 可禁用；USAGE_DASH_CURSOR_TIMEOUT 调整秒数。"""
+
+    Cursor 的 token 只在云端（本地日志不含 token），而这个接口的回答受跨洋往返 +
+    线路带宽限制（实测 TTFB ~0.5s、194KB 下载 ~0.7s，共 ~1.3s），无法再压缩；
+    因此把响应缓存到 .cache/，在 TTL 内刷新直接复用，做到"按下去就出来"。
+
+    USAGE_DASH_CURSOR_API=0 可禁用；USAGE_DASH_CURSOR_TIMEOUT 调整超时秒数；
+    USAGE_DASH_CURSOR_TTL 调整缓存有效期（秒，默认 300，设 0 表示每次都拉最新）。
+    """
     import urllib.request
     if os.environ.get("USAGE_DASH_CURSOR_API") == "0":
         return False
-    tok, sub = _cursor_access_token(tmpdir)
-    if not tok:
-        return False
-    timeout = int(os.environ.get("USAGE_DASH_CURSOR_TIMEOUT", "90"))
-    url = "https://cursor.com/api/dashboard/export-usage-events-csv?strategy=tokens"
-    uid = sub.split("|")[-1] if "|" in sub else None
-    cookies = [c for c in (f"{sub}%3A%3A{tok}" if sub else "",
-                           f"{uid}%3A%3A{tok}" if uid else "",
-                           tok) if c]
-    base_headers = {
-        "Accept": "text/csv,*/*;q=0.8",
-        "Origin": "https://cursor.com",
-        "Referer": "https://cursor.com/dashboard?tab=usage",
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                      "AppleWebKit/537.36",
-    }
+    ttl = int(os.environ.get("USAGE_DASH_CURSOR_TTL", "300"))
     body = None
-    for cv in cookies + [None]:
-        headers = dict(base_headers)
-        if cv:
-            headers["Cookie"] = f"WorkosCursorSessionToken={cv}"
-        else:
-            headers["Authorization"] = f"Bearer {tok}"
+    if ttl > 0:
         try:
-            r = urllib.request.urlopen(
-                urllib.request.Request(url, headers=headers), timeout=timeout)
-            body = r.read().decode("utf-8", "replace")
-            break
-        except urllib.error.HTTPError as e:
-            if e.code not in (401, 403):
-                warnings.append(f"cursor 用量导出 HTTP {e.code}，仅显示本地活动量")
-                return False
+            if CURSOR_CACHE.exists() and time.time() - CURSOR_CACHE.stat().st_mtime < ttl:
+                body = CURSOR_CACHE.read_text()
         except Exception:
-            warnings.append("cursor 用量导出网络失败，仅显示本地活动量")
+            body = None
+
+    if body is None:
+        body = _cursor_fetch_csv(tmpdir)
+        if not body:
             return False
-    if not body:
-        warnings.append("cursor 登录态失效（在 Cursor 中重新登录后可恢复 token 统计），"
-                        "仅显示本地活动量")
-        return False
+        try:
+            CURSOR_CACHE.parent.mkdir(exist_ok=True)
+            CURSOR_CACHE.write_text(body)
+        except Exception:
+            pass
 
     import csv as _csv
     import io
@@ -819,7 +1052,8 @@ def collect_cursor_api(tmpdir):
     per_day = {}   # date -> agg
     cloud = {}     # cloud agent id -> agg
     for row in rows[1:]:
-        date = day_of_iso(col(row, "Date"))
+        date_raw = col(row, "Date")
+        date = day_of_iso(date_raw)
         model = col(row, "Model") or "?"
         inp = num(col(row, "Input (w/ Cache Write)")) + num(col(row, "Input (w/o Cache Write)"))
         cr = num(col(row, "Cache Read"))
@@ -831,12 +1065,15 @@ def collect_cursor_api(tmpdir):
                 cost = float(cost_v[1:].replace(",", ""))
             except Exception:
                 pass
-        if not (inp or out or cr):
+        if not (inp or out or cr) or not date:
             continue
-        add_usage(date, "cursor", project="cursor.com",
-                  hour=hour_of_iso(col(row, "Date")),
-                  inp=inp, out=out, cr=cr, cost=cost,
-                  model=model, events=1)
+        # Date 列若只有日期没有时刻，hour_of_iso 会返回 0，把当天全部用量堆到 00:00
+        # 的假高峰；只有确实带时刻时才记录小时
+        hour = hour_of_iso(date_raw) if len(date_raw) > 10 else None
+        if not add_usage(date, "cursor", project="cursor.com", hour=hour,
+                         inp=inp, out=out, cr=cr, cost=cost,
+                         model=model, events=1):
+            continue   # 日期非法：不要只进会话汇总
         d = per_day.setdefault(date, {"i": 0, "o": 0, "cr": 0, "n": 0,
                                       "cost": 0.0, "hc": False, "models": set()})
         d["i"] += inp; d["o"] += out; d["cr"] += cr; d["n"] += 1
@@ -858,9 +1095,10 @@ def collect_cursor_api(tmpdir):
                     inp=d["i"], out=d["o"], cr=d["cr"],
                     cost=d["cost"] if d["hc"] else None, events=d["n"])
     for caid, c in cloud.items():
+        # 这些 token 已按日计入 api-{date} 会话，若在此再计一次会让"会话之和 > 日之和"
+        # （实测多出 47428）；cloud agent 视图只保留活动量与模型信息
         add_session("cursor", f"cloud-{caid}", project="cursor cloud agent",
-                    last=c["last"], models=sorted(c["models"]),
-                    inp=c["i"], out=c["o"], cr=c["cr"], events=c["n"])
+                    last=c["last"], models=sorted(c["models"]), events=c["n"])
     return bool(per_day)
 
 
@@ -904,8 +1142,7 @@ def collect_cursor(tmpdir):
     # IDE 聊天库 chats/<hash>/<chat>/store.db
     for fp in (HOME / ".cursor" / "chats").glob("*/*/store.db"):
         try:
-            db = _copy_db(fp, tmpdir, f"cursor-{fp.parent.name}.db")
-            con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+            con = _open_ro(fp, tmpdir, f"cursor-{fp.parent.name}.db")
             n = 0
             try:
                 for (blob,) in con.execute("SELECT data FROM blobs"):
@@ -1019,8 +1256,7 @@ def collect_antigravity(tmpdir):
             if fp.name == "db.sqlite":
                 continue
             try:
-                db = _copy_db(fp, tmpdir, f"agy-{rel.split('/')[1]}-{fp.stem}.db")
-                con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+                con = _open_ro(fp, tmpdir, f"agy-{rel.split('/')[1]}-{fp.stem}.db")
                 try:
                     gen = list(con.execute(
                         "SELECT idx, data FROM gen_metadata ORDER BY idx"))
@@ -1105,18 +1341,180 @@ def collect_antigravity(tmpdir):
 
 
 # -------------------------------------------------------------------- main
-def main():
-    tmpdir = tempfile.mkdtemp(prefix="usage-collect-")
+# ---------------------------------------------------- 增量缓存（输入指纹）
+# 思路：不做逐来源的增量解析（容易漏更新），而是给"全部输入"算一个指纹 ——
+# 文件清单本身 + 每项的 (size, mtime_ns)，sqlite 还会带上 -wal/-shm。
+# 指纹没变 ⇒ 上次的聚合结果仍然完整有效，直接反序列化（~20ms）跳过全部解析；
+# 指纹变了 ⇒ 全量重算并覆盖缓存。这样"数据没变时的刷新"是亚秒级的，
+# 而正确性由指纹兜底：任何新增/修改/删除/换登录态都会让指纹失效。
+CACHE_VERSION = 2
+STATE_CACHE = DIR / ".cache" / "collect-state.pkl"
+
+_INPUT_GLOBS = (
+    (".commandcode/projects/*/*.jsonl", "file", None),
+    (".kimix/sessions/*/*/updates.jsonl", "file", None),
+    (".cursor/projects/*/agent-transcripts/*/*.jsonl", "file", None),
+    (".cursor/chats/*/*/store.db", "db", "blobs"),
+    (".gemini/antigravity/conversations/*.db", "db", "gen_metadata"),
+    (".gemini/antigravity-ide/conversations/*.db", "db", "gen_metadata"),
+    (".gemini/antigravity-cli/conversations/*.db", "db", "gen_metadata"),
+)
+_INPUT_SINGLES = (
+    (".dimcode/v2/dimcode.sqlite", "db", "usage_run_stats"),
+    (".local/share/devin/cli/sessions.db", "db", "message_nodes"),
+    ("Library/Application Support/Cursor/User/globalStorage/state.vscdb", "db", "ItemTable"),
+)
+
+
+def _input_sources():
+    """采集用到的全部输入：(路径, 类型, 表名)。'db' 走 SQL 内容指纹，'file' 走 size+mtime。"""
+    out = []
+    for pat, kind, table in _INPUT_GLOBS:
+        for f in HOME.glob(pat):
+            if f.name.endswith(".checkpoints.jsonl"):
+                continue
+            out.append((str(f), kind, table))
+    for rel, kind, table in _INPUT_SINGLES:
+        out.append((str(HOME / rel), kind, table))
+    out.append((str(CURSOR_CACHE), "file", None))
+    return out
+
+
+def _sqlite_signature(path, table):
+    """sqlite 库的内容指纹：(行数, 最大 rowid) —— 精确对应"我们要读的数据有没有新增"。
+
+    刻意不用 mtime、也不用 -wal 大小：正在被使用的 WAL 库这两者都会因 checkpoint 或
+    写入其它表而频繁变化（实测 dimcode 的 -wal 每几秒变一次），会让缓存永不命中。
+    局限：只 UPDATE、不新增行的改动检测不到；本采集读取的列都在 INSERT 时写入，
+    受影响的只有 devin.created_at 这类兜底字段。
+    """
     try:
-        collect_ccusage()
-        collect_commandcode()
-        collect_dimcode(tmpdir)
-        collect_devin(tmpdir)
-        collect_kimix()
-        collect_cursor(tmpdir)
-        collect_antigravity(tmpdir)
-    finally:
-        shutil.rmtree(tmpdir, ignore_errors=True)
+        con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        try:
+            return con.execute(
+                f'SELECT COUNT(*), IFNULL(MAX(rowid), 0) FROM "{table}"').fetchone()
+        finally:
+            con.close()
+    except Exception:
+        return None
+
+
+def _input_fingerprint(ccusage_raw):
+    """输入指纹。任何新增/修改/删除都会改变它，从而让缓存失效。"""
+    items = []
+    for path, kind, table in _input_sources():
+        if kind == "db":
+            items.append((path, _sqlite_signature(path, table)))
+        else:
+            try:
+                st = os.stat(path)
+                items.append((path, st.st_size, st.st_mtime_ns))
+            except OSError:
+                items.append((path, None))
+    items.append(("ccusage", hashlib.sha256((ccusage_raw or "").encode()).hexdigest()))
+    return hashlib.sha256(repr(sorted(items, key=repr)).encode()).hexdigest()
+
+
+def _freeze_rows(rows):
+    """把 defaultdict 形式的聚合桶转成可 pickle 的普通 dict（值里不能再有 lambda）"""
+    return {k: {**b, "models": {m: dict(v) for m, v in b["models"].items()}}
+            for k, b in rows.items()}
+
+
+def _thaw_rows(frozen, factory):
+    out = defaultdict(factory)
+    for k, b in frozen.items():
+        nb = factory()
+        nb.update(b)
+        out[k] = nb
+    return out
+
+
+def _save_state(fingerprint, ccusage_raw):
+    try:
+        STATE_CACHE.parent.mkdir(exist_ok=True)
+        payload = {
+            "version": CACHE_VERSION,
+            "fingerprint": fingerprint,
+            "ccusage_raw": ccusage_raw,
+            "daily": _freeze_rows(daily_rows),
+            "proj": _freeze_rows(proj_rows),
+            "hourly": {k: dict(v) for k, v in hourly_rows.items()},
+            "sessions": sessions,
+            "agent_found": {k: dict(v) for k, v in agent_found.items()},
+            "canon_raws": {k: set(v) for k, v in CANON_RAWS.items()},
+            "warnings": warnings,
+        }
+        fd, tmp = tempfile.mkstemp(prefix="state-", dir=str(STATE_CACHE.parent))
+        with os.fdopen(fd, "wb") as f:
+            pickle.dump(payload, f, protocol=pickle.HIGHEST_PROTOCOL)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, STATE_CACHE)
+    except Exception as e:
+        warnings.append(f"增量缓存写入失败（不影响本次结果）: {e}")
+
+
+def _load_state(fingerprint):
+    try:
+        with open(STATE_CACHE, "rb") as f:
+            p = pickle.load(f)
+    except Exception:
+        return None
+    if p.get("version") != CACHE_VERSION or p.get("fingerprint") != fingerprint:
+        return None
+    return p
+
+
+def _restore_state(p):
+    """把缓存恢复到模块级聚合状态（后续输出阶段照常重算 costEst 等派生值）"""
+    daily_rows.clear()
+    daily_rows.update(_thaw_rows(p["daily"], _bucket))
+    proj_rows.clear()
+    proj_rows.update(_thaw_rows(p["proj"], _bucket))
+    hourly_rows.clear()
+    hourly_rows.update(_thaw_rows(p["hourly"], _hourly_bucket))
+    sessions.extend(s for s in p["sessions"] if (s["agent"], s["sessionId"]) not in seen_session)
+    seen_session.update((s["agent"], s["sessionId"]) for s in p["sessions"])
+    for k, v in p["agent_found"].items():
+        agent_found[k] = dict(v)
+    for k, v in p["canon_raws"].items():
+        CANON_RAWS[k] = set(v)
+    warnings.extend(p["warnings"])
+
+
+def main():
+    # ccusage 先单独跑：它的输出既参与输入指纹，也是缓存未命中时的必需输入（仅 ~0.1s）
+    ccusage_raw = _ccusage_raw()
+    fingerprint = _input_fingerprint(ccusage_raw)
+    cached = _load_state(fingerprint)
+    if cached is not None:
+        _restore_state(cached)
+        print("增量缓存命中（输入未变化），已跳过解析", file=sys.stderr)
+    else:
+        tmpdir = tempfile.mkdtemp(prefix="usage-collect-")
+        try:
+            # 各来源互不依赖，并行采集：cursor 是网络 I/O、devin/dimcode 是大库解析。
+            # 串行时总耗时接近各项之和，并行后由最慢的一项决定。
+            # 共享状态（daily_rows/proj_rows/hourly_rows/sessions/...）的写入由 _state_lock 串行化。
+            jobs = [
+                ("ccusage", collect_ccusage, (ccusage_raw,)),
+                ("commandcode", collect_commandcode, ()),
+                ("dimcode", collect_dimcode, (tmpdir,)),
+                ("devin", collect_devin, (tmpdir,)),
+                ("kimix", collect_kimix, ()),
+                ("cursor", collect_cursor, (tmpdir,)),
+                ("antigravity", collect_antigravity, (tmpdir,)),
+            ]
+            with ThreadPoolExecutor(max_workers=len(jobs)) as ex:
+                futures = {ex.submit(fn, *args): name for name, fn, args in jobs}
+                for fut in as_completed(futures):
+                    try:
+                        fut.result()
+                    except Exception as e:
+                        warnings.append(f"{futures[fut]} 采集异常: {e}")
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+        _save_state(fingerprint, ccusage_raw)
 
     prices, dev_map = load_prices()
     if prices:
@@ -1189,7 +1587,11 @@ def main():
         })
 
     for s in sessions:
-        if s["costUsd"] is None and s["agent"] in NO_COST and s["modelsUsed"]:
+        # 会话级没有按模型的 token 拆分：多模型会话若拿 modelsUsed[0] 的单价给整段会话
+        # 定价，会与"日/项目级按模型分别估算"的口径冲突，且可能偏差数倍。
+        # 只在确知单一模型时才估算，其余留白由前端显示"未定价"。
+        if (s["costUsd"] is None and s["agent"] in NO_COST
+                and len(s["modelsUsed"]) == 1):
             e = est_cost(prices, s["modelsUsed"][0], s["inputTokens"],
                          s["outputTokens"], s["cacheReadTokens"],
                          s["cacheCreationTokens"])
