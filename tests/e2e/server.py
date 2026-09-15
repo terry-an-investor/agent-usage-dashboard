@@ -71,6 +71,13 @@ def build_fixture():
          "cacheReadTokens": 0, "cacheCreationTokens": 0, "totalTokens": 10,
          "costUsd": 0.25, "costEst": None, "events": 0,
          "modelBreakdowns": [_mb("gpt-x", 7, 3, 0, 0, cost=0.25, has_cost=True)]},
+        # proj-shared：同一个项目名被**两个** agent 使用（acct 有项目级日粒度、
+        # est 只有会话记录）。回归点：兜底曾按"项目名"全局判断有无日粒度，
+        # 于是 est 的会话被 acct 的日粒度挡住 → 下钻时整段丢失
+        {"date": d(4), "agent": "acct", "inputTokens": 1000, "outputTokens": 0,
+         "cacheReadTokens": 0, "cacheCreationTokens": 0, "totalTokens": 1000,
+         "costUsd": 1.0, "costEst": None, "events": 0,
+         "modelBreakdowns": [_mb("gpt-x", 1000, 0, 0, 0, cost=1.0, has_cost=True)]},
     ]
 
     project_daily = [
@@ -86,6 +93,11 @@ def build_fixture():
          "outputTokens": 10, "cacheReadTokens": 30, "cacheCreationTokens": 0,
          "totalTokens": 60, "costUsd": None, "costEst": 2.25, "events": 0,
          "modelBreakdowns": [_mb("claude-y", 20, 10, 30, 0, cost=0, cost_est=2.25)]},
+        # 与 daily 里 d(4) 的 acct 行对应：同名项目下 acct 有日粒度、est 没有
+        {"date": d(4), "agent": "acct", "project": "proj-shared", "inputTokens": 1000,
+         "outputTokens": 0, "cacheReadTokens": 0, "cacheCreationTokens": 0,
+         "totalTokens": 1000, "costUsd": 1.0, "costEst": None, "events": 0,
+         "modelBreakdowns": [_mb("gpt-x", 1000, 0, 0, 0, cost=1.0, has_cost=True)]},
     ]
 
     sessions = [
@@ -113,6 +125,13 @@ def build_fixture():
          "lastActivity": ts(1), "modelsUsed": ["gpt-x"],
          "inputTokens": 0, "outputTokens": 0, "cacheReadTokens": 0,
          "cacheCreationTokens": 0, "totalTokens": 0, "costUsd": None, "events": 3},
+        # 同名项目 proj-shared 下**只**有会话的那个 agent（acct 另有日粒度）：
+        # 项目下钻时必须被兜底补上，且不能与 acct 的日粒度重复计
+        {"sessionId": "s-shared-est", "agent": "est", "project": "proj-shared",
+         "lastActivity": ts(4), "modelsUsed": ["claude-y"],
+         "inputTokens": 400, "outputTokens": 0, "cacheReadTokens": 0,
+         "cacheCreationTokens": 0, "totalTokens": 400, "costUsd": None,
+         "costEst": 0.4, "events": 0},
     ]
 
     hourly = [

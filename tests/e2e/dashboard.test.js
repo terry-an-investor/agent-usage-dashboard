@@ -73,8 +73,8 @@ async function withPage(fn, query = '', opts) {
 describe('成本口径（H2 / H3 / H4）', () => {
   test('KPI 成本 = 记账 + 估算，且与 Agent 表合计一致', async () => {
     await withPage(async (page) => {
-      // fixture：acct 记账 1.5+0.5+0.25=2.25，est 估算 2.25 ⇒ 合计 4.5
-      assert.ok(Math.abs(await kpiCost(page) - 4.5) < 0.05, 'KPI 成本应为 4.5');
+      // fixture：acct 记账 1.5+0.5+0.25+1.0=3.25，est 估算 2.25 ⇒ 合计 5.5
+      assert.ok(Math.abs(await kpiCost(page) - 5.5) < 0.05, 'KPI 成本应为 5.5');
       assert.ok(Math.abs((await kpiCost(page)) - (await agentCostSum(page))) < 0.1,
         'KPI 成本与 Agent 表成本列合计应一致');
       // 含估算就必须带 ≈ 前缀，不能把估算伪装成记账金额
@@ -86,7 +86,7 @@ describe('成本口径（H2 / H3 / H4）', () => {
     await withPage(async (page) => {
       const by = Object.fromEntries((await modelCosts(page)).map((c) => [c.model, c]));
       // 回归点：曾读聚合对象上不存在的 hasCost 字段，记账成本全被写成 ≈$0.00
-      assert.equal(by['gpt-x'].text, '$2.25', 'gpt-x 应显示记账成本 $2.25');
+      assert.equal(by['gpt-x'].text, '$3.25', 'gpt-x 应显示记账成本 $3.25');
       assert.equal(by['gpt-x'].isApprox, false, '记账成本不应带 ≈ 前缀');
       assert.equal(by['claude-y'].isApprox, true, '估算成本应带 ≈ 前缀');
       // 回归点：无价目模型曾显示 ≈$0.00，「未定价」永不出现
@@ -174,6 +174,25 @@ describe('筛选与状态', () => {
         assert.equal(projText.includes('无记录'), false, `${pj}: 项目表不应退化成无记录`);
       }, `?p=all&pj=${pj}`);
     }
+  });
+
+  test('同名项目被多个 agent 共用时，会话兜底不被别的 agent 的日粒度挡住（M3b）', async () => {
+    // 回归点：判"该来源是否已有项目级日粒度"用的是只按**项目名**收集的全局 Set，
+    // 于是只要别的 agent 有同名项目的日粒度，本 agent 的会话兜底就被整段排除
+    await withPage(async (page) => {
+      // acct 的日粒度 1.0 + est 的会话兜底 0.4（成本不缩写，断言最稳）
+      const cost = await kpiCost(page);
+      assert.ok(Math.abs(cost - 1.4) < 0.02,
+        `项目下钻应含两个 agent（记账 1.0 + 估算 0.4 = 1.4），实际 ${cost}`);
+    }, '?p=all&pj=proj-shared');
+
+    await withPage(async (page) => {
+      // 只看"仅有会话"的那个 agent：修复前这里整盘归零（KPI 0 / 成本 —）
+      const cost = await kpiCost(page);
+      assert.ok(Math.abs(cost - 0.4) < 0.02, `a=est 下钻成本应为 0.4，实际 ${cost}`);
+      const kpi = num(await page.text('#kpiTotalVal'));
+      assert.ok(kpi > 0, 'a=est 下钻不应归零');
+    }, '?p=all&pj=proj-shared&a=est');
   });
 
   test('事件型来源进入活动量口径', async () => {

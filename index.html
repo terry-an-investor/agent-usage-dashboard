@@ -567,7 +567,7 @@
     <div class="card-head">
       <div>
         <h2 data-i18n="projTitle">项目分布</h2>
-        <div class="hint" data-i18n="projHint">按总 token 排序 · 点击行可筛选项目</div>
+        <div class="hint" data-i18n="projHint">按总 token 排序 · 点击行可筛选项目 · 项目名按来源原样展示（同一项目可能分成多行）</div>
       </div>
     </div>
     <div class="table-scroll" tabindex="0"><table id="projTable" style="margin-top:12px;">
@@ -700,7 +700,7 @@
       distTitle: '用量分布', distHint: '范围内各维度 token 占比 · 前 5 项',
       wkTitle: '分时活跃', wkHint: '星期 × 小时 · 仅含小时粒度来源',
       thTime: '时间', unpriced: '未定价', distOther: '其他', devOther: '其他',
-      projTitle: '项目分布', projHint: '按总 token 排序 · 点击行可筛选项目', thProject: '项目',
+      projTitle: '项目分布', projHint: '按总 token 排序 · 点击行可筛选项目 · 项目名按来源原样展示（同一项目可能分成多行）', thProject: '项目',
       thAgent: 'Agent', thSessions: '会话', thDays: '天数', thEvents: '活动',
       thSource: '数据来源', thHasTokens: 'Token', thHasCost: '成本', thNote2: '说明',
 
@@ -776,7 +776,7 @@
       distTitle: 'Distribution', distHint: 'Token share per dimension in range · top 5',
       wkTitle: 'Activity by Hour', wkHint: 'Weekday × hour · sources with hour granularity only',
       thTime: 'Time', unpriced: 'Unpriced', distOther: 'Other', devOther: 'Other',
-      projTitle: 'Projects', projHint: 'Sorted by total tokens · click a row to filter', thProject: 'Project',
+      projTitle: 'Projects', projHint: 'Sorted by total tokens · click a row to filter · names are shown as each source reports them (one project may split into rows)', thProject: 'Project',
       thAgent: 'Agent', thSessions: 'Sessions', thDays: 'Days', thEvents: 'Events',
       thSource: 'Source', thHasTokens: 'Tokens', thHasCost: 'Cost', thNote2: 'Note',
 
@@ -952,27 +952,30 @@
   let viewRows = [];                    // agent+project 过滤后的源行（供 Agent 表等复用）
 
   function rebuildView() {
-    // 注意按"项目"而不是按"agent"判断：cursor 这类来源既有项目级日粒度（cursor.com 等），
-    // 又会用会话兜底产出别的项目（如 cursor cloud agent）。按 agent 判断会把后者一并排除掉。
-    const projectsWithDaily = new Set(rawProjDaily.map(r => r.project));
+    // 判断"该来源是否已有项目级日粒度"必须按 (agent, project) **组合**：
+    // 同一个项目名可能被多个来源共用（cursor 既有 cursor.com 的日粒度，又有
+    // cursor cloud agent 这类只有会话的项目；不同 agent 也可能撞同名项目）。
+    // 只按项目名判断，会把"没有日粒度那个 agent"的会话整段挡住 ——
+    // 表现为项目下钻空态 / 总量偏少，而 KPI 会话数仍非零。
+    const dailyPairs = new Set(rawProjDaily.map(r => r.agent + '\u0000' + r.project));
     let src = (projSel === 'all' ? rawDaily : rawProjDaily)
       .filter(r => (agentSel === 'all' || r.agent === agentSel) &&
                    (projSel === 'all' || r.project === projSel));
-    // 有些项目只存在于会话记录里（ccusage 来源没有项目级日粒度，见 aggProjects 的兜底），
-    // 它们同样出现在项目下拉中。若不补近似数据，选中后整个面板会归零。
-    // 这里用会话总量近似，口径与 aggProjects 一致。
-    if (projSel !== 'all' && !src.length) {
+    // 只存在于会话记录里的用量（ccusage 来源没有项目级日粒度，见 aggProjects 的兜底）：
+    // 用会话总量近似，口径与 aggProjects 一致。注意不能只在"没有任何日粒度行"时才补 ——
+    // 同名项目下另一个 agent 的量同样要补进来，否则下钻看不到它。
+    if (projSel !== 'all') {
       const sess = (D.sessions || []).filter(s => {
         if (s.project !== projSel) return false;
         if (agentSel !== 'all' && s.agent !== agentSel) return false;
-        if (projectsWithDaily.has(s.project)) return false;   // 已有项目级日粒度，避免重复计
+        if (dailyPairs.has(s.agent + '\u0000' + s.project)) return false;  // 该来源已有日粒度，避免重复计
         if (selModel === 'all') return true;
         // 模型级无法从一个多模型会话里拆分出来：只在"整个会话就用一个模型"时归属，
         // 否则宁可不显示，避免把用量全算到某一个模型头上（与 aggProjects 同口径）
         const mus = s.modelsUsed || [];
         return mus.length === 1 && modelMatch(mus[0]);
       });
-      src = sess.map(s => {
+      src = src.concat(sess.map(s => {
         const mus = s.modelsUsed || [];
         // 单模型会话可以把用量无歧义地归到该模型（模型表也能显示）；
         // 多模型会话不拆，避免把总量全算到某一个模型头上
@@ -994,7 +997,7 @@
             cost: null, costEst: null, hasCost: false,
           }] : [],
         };
-      });
+      }));
     }
     viewRows = src;
     const map = {};
@@ -1761,9 +1764,9 @@
   function aggProjects() {
     const inRange = d => d >= rangeStart && d <= rangeEnd;
     const agg = {};
-    // 与 rebuildView 同口径：按"项目"判断是否已有项目级日粒度，而不是按 agent
-    // （cursor 既有 cursor.com 的项目级数据，又有 cursor cloud agent 这类会话兜底项目）
-    const projectsWithDaily = new Set(rawProjDaily.map(r => r.project));
+    // 与 rebuildView 同口径：按 (agent, project) 组合判断该来源是否已有日粒度。
+    // 一个项目名可能同时被多个 agent 使用，只按项目名判断会丢掉"只有会话"那个 agent 的量
+    const dailyPairs = new Set(rawProjDaily.map(r => r.agent + '\u0000' + r.project));
     for (const r of rawProjDaily) {
       if (!inRange(r.date)) continue;
       if (agentSel !== 'all' && r.agent !== agentSel) continue;
@@ -1800,7 +1803,7 @@
       }
       p.sess++;
       p.agents.add(s.agent);
-      if (!projectsWithDaily.has(s.project)) {
+      if (!dailyPairs.has(s.agent + '\u0000' + s.project)) {
         // 无项目级日粒度的来源用会话总量近似；模型筛选下仅当会话全部模型都命中才归属
         // （多模型会话无法拆出单模型份额，宁可不计也不虚高）
         if (selModel === 'all' || (s.modelsUsed || []).every(modelMatch)) {
