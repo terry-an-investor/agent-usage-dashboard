@@ -129,7 +129,7 @@ USAGE_DASH_CURSOR_TTL=0  1.89s   全量（尊重"每次拉最新"）
 | --- | --- |
 | 指纹对"只 UPDATE、不 INSERT"是盲的 | 要覆盖得给大表加 `SUM(LENGTH(...))`，代价与收益不成比例；采集读取的列都在 INSERT 时写入，注释已写明局限 |
 | `_load_state` 用 `pickle` 反序列化本地 `.cache/collect-state.pkl` | 能写该文件即可执行代码；本机单用户 + 文件权限 600，属低危 |
-| 项目名跨来源分裂（`Desktop/trading-logic` / `~/desktop-trading-logic` / `trading-logic`） | **采集侧无法无损还原**：cursor transcript 只有 `message`/`role` 没有路径字段；目录内 `.workspace-trusted` 仅 2/9 有 `workspacePath`；commandcode 目录名已全小写（大小写与路径段边界丢失）。强制归并只能靠模糊匹配，会重蹈 `7150264` 修掉的"dashboard / data 撞标签"。现处理：项目表 hint 说明"项目名按来源原样展示（同名项目可能拆分或合并显示）" |
+| 项目名跨来源分裂（`Desktop/trading-logic` / `~/desktop-trading-logic` / `trading-logic`） | 采集侧**无法无损还原**（cursor transcript 只有 `message`/`role` 没有路径字段；目录内 `.workspace-trusted` 仅 2/9 有 `workspacePath`；commandcode 目录名已全小写，大小写与路径段边界丢失）。**后续（`9814220`）改为在展示层归并**：按小写段序列的后缀关系合并，两边都需 ≥2 段以避开 1 段短名吞并（即 `7150264` 修过的撞标签），代表名优先"像路径"的写法；实测 `trading-logic` 三种写法并成一行（agents 四种）、项目下拉 53 → 35 项，4 个 worktree 变体未被误吞 |
 | 兜底近似行的总量不按天数摊平 | 会话只记了最后活动日，摊平就是假精度。日柱图在该日偏高的语义已写进注释与 `AGENTS.md` |
 | `?p=all&pj=X` 直开 URL 与"切项目后点全部"的 `rangeStart` 来源不同 | 实测发现的既有行为（前者用"全部视图"的 firstDate，因为 `applyPreset` 跑在 `rebuildView` 之前）；影响仅限于范围起点，未动 |
 | 运行中的 8931 是旧 Python 实例 | 行为实测与 HEAD 一致；建议 `./start.sh` 重启以消除"跑的不是当前代码"的混淆 |
