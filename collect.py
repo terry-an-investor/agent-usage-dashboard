@@ -261,7 +261,7 @@ def load_prices():
             PRICES_CACHE.parent.mkdir(exist_ok=True)
             PRICES_CACHE.write_text(json.dumps(raw))
         except Exception as e:
-            warnings.append(f"models.dev 价目下载失败，使用缓存/跳过估算: {e}")
+            _warn(f"models.dev 价目下载失败，使用缓存/跳过估算: {e}")
             try:
                 raw = json.loads(PRICES_CACHE.read_text())
             except Exception:
@@ -317,6 +317,20 @@ def est_cost(prices, name, inp, out, cr, cc):
     return (inp * p["in"] + out * p["out"] + cr * p["cr"] + cc * p["cw"]) / 1e6
 
 
+def _hourly_est(prices, agent, model, bucket):
+    """小时级估算成本。
+
+    与行级 `_row_est` 同口径：该桶**已有记账成本时不再叠加估算**，否则同一批
+    token 会同时带 costUsd 与 costEst，单日小时视图的 tooltip 会把它们相加双计
+    （cursor 属 NO_COST，但它确实会写记账成本）。
+    """
+    if agent not in NO_COST or bucket.get("costKnown"):
+        return None
+    e = est_cost(prices, model, bucket["inputTokens"], bucket["outputTokens"],
+                 bucket["cacheReadTokens"], bucket["cacheCreationTokens"])
+    return round(e, 6) if e is not None else None
+
+
 def _model_bucket():
     return {
         "inputTokens": 0, "outputTokens": 0, "cacheReadTokens": 0,
@@ -355,6 +369,16 @@ warnings = []
 _state_lock = threading.RLock()
 
 
+def _warn(msg):
+    """记录一条警告。
+
+    采集跑在线程池里：list.append 本身是原子的，但 AGENTS.md 约定共享状态的读写
+    一律走 _state_lock，这里统一收口（锁可重入，锁内调用也安全）。
+    """
+    with _state_lock:
+        warnings.append(msg)
+
+
 _date_re = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
@@ -390,10 +414,23 @@ def hour_of_iso(s):
 
 
 def hour_of_ts(ts):
-    """epoch 秒或毫秒 -> 本地小时 0-23"""
-    if ts > 1e12:
-        ts /= 1000.0
-    return datetime.fromtimestamp(ts).hour
+    """epoch 秒或毫秒 -> 本地小时 0-23；无法解析时返回 None（调用方跳过）
+
+    必须自己兜住异常：调用点吃的是原始 JSON 值，一个字符串时间戳就会 TypeError、
+    非法值会 ValueError，冒泡出去会把该来源剩余文件全部丢掉。
+    """
+    try:
+        v = float(ts)
+    except (TypeError, ValueError):
+        return None
+    if not v or v <= 0:
+        return None
+    if v > 1e12:
+        v /= 1000.0
+    try:
+        return datetime.fromtimestamp(v).hour
+    except (OverflowError, OSError, ValueError):
+        return None
 
 
 def iso_from_ts(ts):
@@ -468,7 +505,7 @@ def _warn_bad_date(agent, date):
         if key in _bad_date_seen:
             return
         _bad_date_seen.add(key)
-        warnings.append(f"跳过日期无法解析的 {agent} 记录: date={date!r}")
+        _warn(f"跳过日期无法解析的 {agent} 记录: date={date!r}")
 
 
 def add_usage(date, agent, project=None, hour=None, **kw):
@@ -518,7 +555,9 @@ def add_session(agent, sid, project="", last="", models=None,
 
 def mark(agent, **kw):
     with _state_lock:
-        a = agent_found.setdefault(agent, {"sessions": 0, "days": set()})
+        # 只保留调用方实际上报过的标记（目前只有 tokens）；这里曾挂着
+        # sessions/days 两个从没被写入过的死字段
+        a = agent_found.setdefault(agent, {})
         a.update({k: v for k, v in kw.items() if v is not None})
 
 
@@ -527,7 +566,7 @@ def _ccusage_raw():
     """跑一次 ccusage 拿原始 JSON 文本（None = 不可用）。
     单独抽出来是因为它的输出既是指纹的一部分，也是缓存未命中时的必需输入。"""
     if not CCUSAGE.exists():
-        warnings.append("ccusage 未安装（node_modules/.bin/ccusage 不存在），跳过 kimi/codex 等来源")
+        _warn("ccusage 未安装（node_modules/.bin/ccusage 不存在），跳过 kimi/codex 等来源")
         return None
     try:
         r = subprocess.run(
@@ -535,11 +574,11 @@ def _ccusage_raw():
              "--by-agent", "--sections", "daily,monthly,session"],
             capture_output=True, text=True, timeout=600, cwd=str(DIR))
         if r.returncode != 0:
-            warnings.append(f"ccusage 执行失败: {r.stderr.strip()[:300]}")
+            _warn(f"ccusage 执行失败: {r.stderr.strip()[:300]}")
             return None
         return r.stdout
     except Exception as e:
-        warnings.append(f"ccusage 异常: {e}")
+        _warn(f"ccusage 异常: {e}")
         return None
 
 
@@ -551,7 +590,7 @@ def collect_ccusage(raw=None):
     try:
         data = json.loads(raw)
     except Exception as e:
-        warnings.append(f"ccusage 输出解析失败: {e}")
+        _warn(f"ccusage 输出解析失败: {e}")
         return
 
     agents_seen = set()
@@ -639,10 +678,7 @@ def collect_commandcode():
                         continue
                     found = True
                     model = o.get("model") or (o.get("message") or {}).get("model") or "?"
-                    models_used.add(model)
                     ts = o.get("timestamp") or ""
-                    if ts > last_ts:
-                        last_ts = ts
                     date = day_of_iso(ts) if ts else day_of_ts(fp.stat().st_mtime)
                     inp = u.get("inputTokens") or u.get("input_tokens") or 0
                     out = u.get("outputTokens") or u.get("output_tokens") or 0
@@ -653,15 +689,19 @@ def collect_commandcode():
                                      hour=hour_of_iso(ts),
                                      inp=_fresh(inp, cr), out=out,
                                      cr=cr, cc=cc, cost=cost, model=model):
-                        # 日期非法：整行跳过。累加必须放在守卫**之后**，
-                        # 否则被挡掉的行仍会进会话汇总（会话之和 > 日之和）
+                        # 日期非法：整行跳过。数值与会话元数据的累加都必须放在
+                        # 守卫**之后**，否则被挡掉的行仍会进会话汇总（会话之和 >
+                        # 日之和），日期轴还会出现 `13/09/2026` 这类假日期
                         continue
+                    models_used.add(model)
+                    if ts > last_ts:
+                        last_ts = ts
                     tot["i"] += _fresh(inp, cr); tot["o"] += out
                     tot["cr"] += cr; tot["cc"] += cc
                     if cost is not None:
                         tot["cost"] += cost; tot["has_cost"] = True
         except Exception as e:
-            warnings.append(f"commandcode 解析失败（该文件剩余行已跳过）: {fp.name}: {e}")
+            _warn(f"commandcode 解析失败（该文件剩余行已跳过）: {fp.name}: {e}")
             continue
         if found and (tot["i"] or tot["o"] or tot["cr"]):
             add_session("commandcode", sid, project=proj_short,
@@ -777,10 +817,10 @@ def collect_dimcode(tmpdir):
             if agg:
                 mark("dimcode", tokens=True)
         except sqlite3.Error as e:
-            warnings.append(f"dimcode 读取失败: {e}")
+            _warn(f"dimcode 读取失败: {e}")
         con.close()
     except Exception as e:
-        warnings.append(f"dimcode 异常: {e}")
+        _warn(f"dimcode 异常: {e}")
 
 
 # ------------------------------------------------------------------ devin
@@ -870,7 +910,7 @@ def collect_devin(tmpdir):
             mark("devin", tokens=True)
         con.close()
     except Exception as e:
-        warnings.append(f"devin 异常: {e}")
+        _warn(f"devin 异常: {e}")
 
 
 # ------------------------------------------------------------------ kimix
@@ -928,13 +968,13 @@ def collect_kimix():
                     a["models"].update(mu.keys() or ["?"])
                     a["last"] = max(a["last"], ts)
         except Exception as e:
-            warnings.append(f"kimix 解析失败（该文件剩余行已跳过）: {fp.name}: {e}")
+            _warn(f"kimix 解析失败（该文件剩余行已跳过）: {fp.name}: {e}")
             continue
         proj = "/".join(fp.parent.parent.name.replace("%2F", "/").split("/")[-2:])
         for sid, a in agg.items():
             add_session("kimix", sid,
                         project=proj,
-                        last=datetime.fromtimestamp(a["last"]).isoformat() if a["last"] else "",
+                        last=iso_from_ts(a["last"]) or "",
                         models=sorted(a["models"]),
                         inp=a["i"], out=a["o"], cr=a["cr"])
     if found:
@@ -976,12 +1016,12 @@ def _cursor_fetch_csv(tmpdir):
             return r.read().decode("utf-8", "replace")
         except urllib.error.HTTPError as e:
             if e.code not in (401, 403):
-                warnings.append(f"cursor 用量导出 HTTP {e.code}，仅显示本地活动量")
+                _warn(f"cursor 用量导出 HTTP {e.code}，仅显示本地活动量")
                 return None
         except Exception:
-            warnings.append("cursor 用量导出网络失败，仅显示本地活动量")
+            _warn("cursor 用量导出网络失败，仅显示本地活动量")
             return None
-    warnings.append("cursor 登录态失效（在 Cursor 中重新登录后可恢复 token 统计），"
+    _warn("cursor 登录态失效（在 Cursor 中重新登录后可恢复 token 统计），"
                     "仅显示本地活动量")
     return None
 
@@ -1036,7 +1076,7 @@ def collect_cursor_api(tmpdir):
     import urllib.request
     if os.environ.get("USAGE_DASH_CURSOR_API") == "0":
         return False
-    ttl = int(os.environ.get("USAGE_DASH_CURSOR_TTL", "300"))
+    ttl = _cursor_ttl()
     body = None
     if ttl > 0:
         try:
@@ -1343,10 +1383,11 @@ def collect_antigravity(tmpdir):
                     model = _pbs(chat, 21) or _pbs(chat, 19) or "?"
                     date = day_of_ts(sec)
                     found.add(agent)
-                    add_usage(date, agent, project=project or agent,
-                              hour=hour_of_ts(sec),
-                              inp=inp, out=out + think,
-                              cr=cr, model=model, events=1)
+                    if not add_usage(date, agent, project=project or agent,
+                                     hour=hour_of_ts(sec),
+                                     inp=inp, out=out + think,
+                                     cr=cr, model=model, events=1):
+                        continue     # 日期非法：不要只进会话汇总
                     sess["i"] += inp; sess["o"] += out + think; sess["cr"] += cr
                     sess["n"] += 1; sess["models"].add(model)
                     sess["last"] = max(sess["last"], sec)
@@ -1371,7 +1412,7 @@ def collect_antigravity(tmpdir):
 # 指纹没变 ⇒ 上次的聚合结果仍然完整有效，直接反序列化（~20ms）跳过全部解析；
 # 指纹变了 ⇒ 全量重算并覆盖缓存。这样"数据没变时的刷新"是亚秒级的，
 # 而正确性由指纹兜底：任何新增/修改/删除/换登录态都会让指纹失效。
-CACHE_VERSION = 3    # 3: 指纹含 db 的存在性签名与 cursor 缓存新鲜度
+CACHE_VERSION = 4    # 4: 指纹去掉 cursor CSV/新鲜度（改由状态缓存年龄负责）
 STATE_CACHE = DIR / ".cache" / "collect-state.pkl"
 
 _INPUT_GLOBS = (
@@ -1404,18 +1445,8 @@ def _input_sources():
     return out
 
 
-def _sqlite_signature(path, table):
-    """sqlite 库的内容指纹：(行数, 最大 rowid) —— 精确对应"我们要读的数据有没有新增"。
-
-    刻意不用 mtime、也不用 -wal 大小：正在被使用的 WAL 库这两者都会因 checkpoint 或
-    写入其它表而频繁变化（实测 dimcode 的 -wal 每几秒变一次），会让缓存永不命中。
-    局限：只 UPDATE、不新增行的改动检测不到；本采集读取的列都在 INSERT 时写入，
-    受影响的只有 devin.created_at 这类兜底字段。
-    """
-    if not os.path.exists(path):
-        # 库不存在是一个**可复现的状态**：必须给出稳定签名，
-        # 否则没装某个 agent 的机器上指纹算不出来，增量缓存会被永久禁用
-        return ("absent",)
+def _sqlite_signature_at(path, table):
+    """就地读一次签名（不做任何回退）"""
     try:
         con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
         try:
@@ -1424,40 +1455,77 @@ def _sqlite_signature(path, table):
             return ("ok", cnt, mx)
         finally:
             con.close()
+    except sqlite3.OperationalError as e:
+        if "no such table" in str(e):
+            return ("no-table",)     # schema 变更是可复现状态（上游库多为逆向来的）
+        return None
     except Exception:
-        # 库存在但签名读不出来（如 -shm 不可写）：_open_ro 仍可能回退到复制库读到
-        # **新鲜数据**，而指纹若在这里给个固定值，缓存就会永久命中、页面静默停在
-        # 旧数字。返回 None 让 _input_fingerprint 整体 fail-closed。
         return None
 
 
-def _cursor_cache_stale():
-    """cursor 用量 CSV 是否已过 TTL。
+def _sqlite_signature(path, table):
+    """sqlite 库的内容指纹：(行数, 最大 rowid) —— 精确对应"我们要读的数据有没有新增"。
 
-    这张 CSV 是网络缓存，而"重新拉取"只发生在缓存未命中时 —— 如果指纹只看它的
-    (size, mtime)，命中期就永远不会重新拉，数据会停在上一次（自我循环）。
-    把"是否过期"纳入指纹即可打破循环：新鲜时指纹稳定（仍可 0.2s 命中），
-    过期时指纹变化 → 重新采集并拉取。
+    刻意不用 mtime、也不用 -wal 大小：正在被使用的 WAL 库这两者都会因 checkpoint 或
+    写入其它表而频繁变化（实测 dimcode 的 -wal 每几秒变一次），会让缓存永不命中。
+    局限：只 UPDATE、不新增行的改动检测不到；本采集读取的列都在 INSERT 时写入，
+    受影响的只有 devin.created_at 这类兜底字段。
+
+    只有当"可能读到新鲜数据、却算不出签名"时才 fail-closed —— 那正是 _open_ro 会
+    回退到复制库的场景，所以这里沿同一条路径再算一次。反过来，把"库不存在 / 空库 /
+    表不存在"这类**可复现状态**判成 None，会让整机指纹永远算不出来、增量缓存被
+    永久禁用（每次刷新全量重算，界面上还看不出来）。
+    """
+    if not os.path.exists(path):
+        return ("absent",)           # 没装这个 agent：可复现状态，给稳定签名
+    try:
+        if os.path.getsize(path) == 0:
+            return ("empty",)        # 库被创建但还没写入（首次启动 / 崩溃残留）
+    except OSError:
+        return None
+    sig = _sqlite_signature_at(path, table)
+    if sig is not None:
+        return sig
+    try:
+        with tempfile.TemporaryDirectory(prefix="usage-sig-") as td:
+            return _sqlite_signature_at(_copy_db(path, td, "sig.db"), table)
+    except Exception:
+        return None                  # 连复制也读不出来：宁可不复用缓存
+
+
+def _cursor_ttl():
+    """cursor 用量 CSV 的 TTL（秒）：0 表示每次都拉最新"""
+    try:
+        return int(os.environ.get("USAGE_DASH_CURSOR_TTL", "300"))
+    except (TypeError, ValueError):
+        return 300
+
+
+def _state_ttl():
+    """状态缓存的最大年龄（秒）。
+
+    输入没变 ≠ 数据可以一直不动：cursor 的网络用量、各类上游 TTL 都只在真正跑
+    采集时才会被检查。没有年龄上限，一份"已过期且本次拉取失败"的 CSV 会被永久
+    命中、再也不重试拉取 —— 正是"数据长期停滞"那类缺陷。
     """
     try:
-        ttl = int(os.environ.get("USAGE_DASH_CURSOR_TTL", "300"))
-    except ValueError:
-        ttl = 300
-    if ttl <= 0:
-        return True          # TTL=0 语义就是"每次都拉最新"
-    try:
-        return time.time() - CURSOR_CACHE.stat().st_mtime >= ttl
-    except OSError:
-        return True          # 没有缓存文件，本来就要拉
+        return int(os.environ.get("USAGE_DASH_STATE_TTL", "300"))
+    except (TypeError, ValueError):
+        return 300
 
 
 def _input_fingerprint(ccusage_raw):
     """输入指纹。任何新增/修改/删除都会改变它，从而让缓存失效。
 
     算不完整时返回 None（宁可不用缓存，也不用错缓存）。
+    刻意**不含** cursor 用量 CSV：它是采集自己在拉取时重写的网络缓存，用它的
+    (size, mtime) 会形成"拉取 → 指纹变化 → 下一轮又未命中"的自我循环（实测每次
+    拉取后白付一次全量：0.2s → 1.1s）。它的新鲜度交给 _state_ttl 负责。
     """
     items = []
     for path, kind, table in _input_sources():
+        if str(path) == str(CURSOR_CACHE):
+            continue                 # 见 docstring：由状态缓存年龄负责
         if kind == "db":
             sig = _sqlite_signature(path, table)
             if sig is None:
@@ -1469,7 +1537,6 @@ def _input_fingerprint(ccusage_raw):
                 items.append((path, st.st_size, st.st_mtime_ns))
             except OSError:
                 items.append((path, None))
-    items.append(("cursor-stale", _cursor_cache_stale()))
     items.append(("ccusage", hashlib.sha256((ccusage_raw or "").encode()).hexdigest()))
     return hashlib.sha256(repr(sorted(items, key=repr)).encode()).hexdigest()
 
@@ -1512,24 +1579,21 @@ def _save_state(fingerprint, ccusage_raw):
         os.chmod(tmp, 0o600)
         os.replace(tmp, STATE_CACHE)
     except Exception as e:
-        warnings.append(f"增量缓存写入失败（不影响本次结果）: {e}")
-
-
-def _save_state_after_collection(ccusage_raw):
-    """按**采集后**的输入状态保存缓存，返回实际写入的指纹（不可用时 None）。
-
-    采集过程本身会改写输入：cursor 用量 CSV 就是"拉取时重写"的。若沿用采集前
-    算出的指纹，下次刷新算出的指纹必然不同 → 每次真实拉取之后都要白付一次
-    全量重算（实测 0.2s 变 1.1s）。
-    """
-    fp = _input_fingerprint(ccusage_raw)
-    _save_state(fp, ccusage_raw)     # 内部对 None 已防御
-    return fp
+        _warn(f"增量缓存写入失败（不影响本次结果）: {e}")
 
 
 def _load_state(fingerprint):
     if fingerprint is None:
         return None       # 指纹不可用：不许命中缓存（fail-closed）
+    # 输入没变 ≠ 数据可以一直不动：cursor 的网络用量、各类上游 TTL 只在真正跑
+    # 采集时才会被检查。没有年龄上限，"已过期且拉取失败"的输入会被永久命中、
+    # 再也不重试（正是"数据长期停滞"那类缺陷）。TTL=0 表示用户要每次都拉最新，
+    # 那就干脆不命中缓存。
+    try:
+        if _cursor_ttl() <= 0 or time.time() - STATE_CACHE.stat().st_mtime > _state_ttl():
+            return None
+    except OSError:
+        return None
     try:
         with open(STATE_CACHE, "rb") as f:
             p = pickle.load(f)
@@ -1590,10 +1654,10 @@ def main():
                     try:
                         fut.result()
                     except Exception as e:
-                        warnings.append(f"{futures[fut]} 采集异常: {e}")
+                        _warn(f"{futures[fut]} 采集异常: {e}")
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
-        _save_state_after_collection(ccusage_raw)
+        _save_state(fingerprint, ccusage_raw)
 
     prices, dev_map = load_prices()
     if prices:
@@ -1690,11 +1754,9 @@ def main():
             "costUsd": round(b["costUsd"], 6) if b["costKnown"] else None,
             "events": b["events"],
         }
-        if agent in NO_COST:
-            e = est_cost(prices, model, b["inputTokens"], b["outputTokens"],
-                         b["cacheReadTokens"], b["cacheCreationTokens"])
-            if e is not None:
-                row["costEst"] = round(e, 6)
+        e = _hourly_est(prices, agent, model, b)
+        if e is not None:
+            row["costEst"] = e
         hourly.append(row)
 
     agents = []

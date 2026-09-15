@@ -26,6 +26,20 @@ if str(ROOT) not in sys.path:
 
 import collect as m  # noqa: E402
 
+# 兜底重定向：任何测试（含将来新加的）都不该写到用户真实的 .cache ——
+# 它既不是 git 管理的产物，也不该被测试改写。各个 TestCase 若需要更细的隔离
+# 可再自行重定向（见 IncrementalCacheTest.setUp）。
+_MODULE_TMP = tempfile.mkdtemp(prefix="usage-tests-")
+
+
+def setUpModule():
+    m.STATE_CACHE = Path(_MODULE_TMP) / "collect-state.pkl"
+    m.CURSOR_CACHE = Path(_MODULE_TMP) / "cursor-usage.csv"
+
+
+def tearDownModule():
+    shutil.rmtree(_MODULE_TMP, ignore_errors=True)
+
 
 def _reset_state():
     m.daily_rows.clear()
@@ -104,6 +118,11 @@ class AccumTest(unittest.TestCase):
         m._accum(m.daily_rows, ("2026-09-15", "t"), inp=500, model="m1")
         self.assertEqual(m.daily_rows[("2026-09-15", "t")]["models"]["m1"]["inputTokens"], 500)
 
+    def test_mark_keeps_only_reported_flags(self):
+        m.mark("ag-x", tokens=True)
+        self.assertEqual(m.agent_found["ag-x"], {"tokens": True},
+                         "mark 不该再挂 sessions/days 这类从未被写入的死字段")
+
 
 class EstCostTest(unittest.TestCase):
     """无价目、无用量都必须返回 None，不能返回 0.0（否则渲染成 ≈$0.00）"""
@@ -119,6 +138,18 @@ class EstCostTest(unittest.TestCase):
     def test_computes_usd(self):
         self.assertAlmostEqual(m.est_cost(self.PRICES, "m", 1_000_000, 0, 0, 0), 1.0)
         self.assertAlmostEqual(m.est_cost(self.PRICES, "m", 0, 1_000_000, 0, 0), 2.0)
+
+    def test_hourly_est_skipped_when_bucket_has_recorded_cost(self):
+        # 回归点：cursor 属于 NO_COST，但它确实会写记账成本 —— 同一个小时桶同时
+        # 带 costUsd 与 costEst，会让单日小时视图的 tooltip 相加双计
+        b = {"inputTokens": 1_000_000, "outputTokens": 0, "cacheReadTokens": 0,
+             "cacheCreationTokens": 0, "costKnown": True}
+        self.assertIsNone(m._hourly_est(self.PRICES, "cursor", "m", b),
+                          "已有记账成本时不得再叠加估算")
+        self.assertAlmostEqual(
+            m._hourly_est(self.PRICES, "cursor", "m", {**b, "costKnown": False}), 1.0)
+        self.assertIsNone(m._hourly_est(self.PRICES, "acct", "m", {**b, "costKnown": False}),
+                          "非 NO_COST 来源不做估算")
 
 
 class PriceMapTest(unittest.TestCase):
@@ -239,11 +270,16 @@ class IncrementalCacheTest(unittest.TestCase):
         self.assertNotEqual(m._input_fingerprint("a"), m._input_fingerprint("b"))
 
     def test_fingerprint_sensitive_to_input_file_change(self):
-        m.CURSOR_CACHE.write_text("x")
-        before = m._input_fingerprint("a")
-        future = time.time() + 10
-        os.utime(m.CURSOR_CACHE, (future, future))
-        self.assertNotEqual(before, m._input_fingerprint("a"))
+        # 指纹要能感知普通输入文件的变化（cursor 用量 CSV 除外 —— 它是网络缓存、
+        # 会被采集自己重写，见 test_fingerprint_ignores_cursor_cache_rewrite）
+        extra = Path(self.tmp) / "some-input.jsonl"
+        extra.write_text("x")
+        with mock.patch.object(m, "_input_sources",
+                               return_value=[(str(extra), "file", None)]):
+            before = m._input_fingerprint("a")
+            future = time.time() + 10
+            os.utime(extra, (future, future))
+            self.assertNotEqual(before, m._input_fingerprint("a"))
 
     def test_save_load_restore_roundtrip(self):
         m.add_usage("2026-09-15", "ag", project="p", hour=9, inp=10, out=5, cr=1, cc=0, model="m")
@@ -282,12 +318,6 @@ class IncrementalCacheTest(unittest.TestCase):
             pickle.dump(payload, f)
         self.assertIsNone(m._load_state("fp"))
 
-    def test_absent_db_is_a_stable_signature(self):
-        # 库不存在是一个**可复现的状态**，不能被当成"读不出来"而永久禁掉缓存
-        sig = m._sqlite_signature(Path(self.tmp) / "nope.db", "t")
-        self.assertIsNotNone(sig, "不存在的库应有稳定签名（否则缓存永不命中）")
-        self.assertEqual(sig, m._sqlite_signature(Path(self.tmp) / "nope.db", "t"))
-
     def test_fingerprint_fails_closed_when_db_unreadable(self):
         # 库存在但签名读不出来（如 -shm 不可写）时，_open_ro 仍可能回退到复制库
         # 读到**新鲜数据**；此时若指纹记成固定值，缓存会永久命中 → 页面停在旧数字。
@@ -305,33 +335,64 @@ class IncrementalCacheTest(unittest.TestCase):
                          "指纹不可用时不应写出状态缓存（否则下次会被 None 命中）")
         self.assertIsNone(m._load_state(None))
 
-    def test_stale_cursor_cache_invalidates_fingerprint(self):
-        # cursor 用量 CSV 是网络缓存：过了 TTL 就该重新拉取。而拉取只发生在
-        # "缓存未命中"时，若指纹只看 CSV 的 (size, mtime)，命中期就再也不会拉 →
-        # 数据永远停在上一次（自我循环）。这里文件**字节与 mtime 都不变**，
-        # 只让 TTL 判定从"新鲜"变成"过期"，指纹就必须随之变化。
-        m.CURSOR_CACHE.write_text("x")
-        with mock.patch.dict(os.environ, {"USAGE_DASH_CURSOR_TTL": "300"}):
-            fresh = m._input_fingerprint("x")
-            self.assertEqual(fresh, m._input_fingerprint("x"),
-                             "CSV 新鲜时指纹应当稳定（缓存要能命中）")
-        with mock.patch.dict(os.environ, {"USAGE_DASH_CURSOR_TTL": "0"}):
-            expired = m._input_fingerprint("x")
-        self.assertNotEqual(fresh, expired,
-                            "cursor 缓存过期后指纹必须变化，否则缓存永不失效")
+    def test_fingerprint_ignores_cursor_cache_rewrite(self):
+        # 回归点：cursor 用量 CSV 是采集**自己**在拉取时重写的输入。若它的
+        # (size, mtime) 参与指纹，就会"拉取 → 指纹变化 → 下一轮又未命中"，
+        # 每次白白多算一次全量（实测 0.2s → 1.1s）。它的新鲜度改由状态缓存年龄负责。
+        m.CURSOR_CACHE.write_text("old")
+        before = m._input_fingerprint("a")
+        m.CURSOR_CACHE.write_text("fetched-during-collection")
+        future = time.time() + 10
+        os.utime(m.CURSOR_CACHE, (future, future))
+        self.assertEqual(before, m._input_fingerprint("a"),
+                         "cursor CSV 被重写不应改变输入指纹")
 
-    def test_saved_fingerprint_reflects_post_collection_inputs(self):
-        # 回归点：指纹在采集**前**算、状态在采集**后**存 —— 而采集过程本身会改写
-        # 输入（cursor 用量 CSV 就是在拉取时重写的）。沿用采集前的指纹，
-        # 下次算出的必然不同 → 每次真实拉取后都白付一次全量重算。
-        before = m._input_fingerprint("x")
-        m.CURSOR_CACHE.write_text("fetched-during-collection")   # 模拟采集改写了输入
-        saved = m._save_state_after_collection("x")
-        self.assertNotEqual(saved, before, "夹具本身应让输入发生变化")
-        self.assertEqual(saved, m._input_fingerprint("x"),
-                         "保存的指纹必须与下次算出的一致，否则缓存命中不了")
-        self.assertIsNotNone(m._load_state(m._input_fingerprint("x")),
-                             "按采集后指纹保存的缓存应当能命中")
+    def test_state_cache_expires_by_age(self):
+        # 输入没变 ≠ 数据可以一直不动：cursor 的网络用量与各类上游 TTL 只在真正
+        # 跑采集时才会被检查。没有年龄上限，一份"过期且拉取失败"的 CSV 会被
+        # 永久命中、再也不重试拉取（正是本 commit 要消灭的停滞类缺陷）。
+        m._save_state("fp", "raw")
+        self.assertIsNotNone(m._load_state("fp"), "刚写的缓存应当命中")
+        old = time.time() - int(os.environ.get("USAGE_DASH_STATE_TTL", "300")) - 60
+        os.utime(m.STATE_CACHE, (old, old))
+        self.assertIsNone(m._load_state("fp"),
+                          "超过 USAGE_DASH_STATE_TTL 后不得再命中")
+
+    def test_cursor_ttl_zero_disables_state_cache(self):
+        # USAGE_DASH_CURSOR_TTL=0 的语义是"每次都拉最新"，不能被增量缓存架空
+        m._save_state("fp", "raw")
+        with mock.patch.dict(os.environ, {"USAGE_DASH_CURSOR_TTL": "0"}):
+            self.assertIsNone(m._load_state("fp"), "TTL=0 时不应命中状态缓存")
+
+    def test_absent_empty_and_no_table_are_stable_signatures(self):
+        # 三种"可复现状态"都必须给出稳定签名：判成 None 会让整机指纹永远算不出来，
+        # 增量缓存被永久禁用（每次刷新全量重算，界面无感）
+        self.assertIsNotNone(m._sqlite_signature(Path(self.tmp) / "nope.db", "t"),
+                             "库不存在")
+        empty = Path(self.tmp) / "empty.db"
+        empty.write_text("")
+        self.assertIsNotNone(m._sqlite_signature(empty, "t"), "0 字节空库")
+        db = Path(self.tmp) / "othertable.db"
+        con = sqlite3.connect(str(db))
+        con.execute("CREATE TABLE other(x)")
+        con.commit()
+        con.close()
+        self.assertIsNotNone(m._sqlite_signature(db, "t"), "表不存在")
+
+    def test_signature_falls_back_to_copy_when_direct_read_fails(self):
+        # 直读算不出签名时，应沿 _open_ro 的同一条路径"复制库再读"：采集器本来就
+        # 能靠复制拿到数据，指纹若在此时失效，就会出现"读得出的数据、守不住的指纹"
+        db = Path(self.tmp) / "src.db"
+        con = sqlite3.connect(str(db))
+        con.execute("CREATE TABLE t(x)")
+        con.executemany("INSERT INTO t VALUES(?)", [(i,) for i in range(7)])
+        con.commit()
+        con.close()
+        real = m._sqlite_signature(db, "t")
+        self.assertEqual(real, ("ok", 7, 7))
+        with mock.patch.object(m, "_sqlite_signature_at", side_effect=[None, real]):
+            self.assertEqual(m._sqlite_signature(db, "t"), real,
+                             "直读失败应回退到复制后重读")
 
 
 class _TmpHomeTest(unittest.TestCase):
@@ -376,6 +437,27 @@ class BadDateGranularityTest(_TmpHomeTest):
                          [("2026-09-15", "commandcode")])
         self.assertEqual(sum(s["totalTokens"] for s in m.sessions), 150)
 
+    def test_bad_date_line_does_not_leak_session_metadata(self):
+        # 被守卫丢弃的行不应再贡献会话的 lastActivity / 模型列表：否则日期轴会
+        # 出现 `13/09/2026` 这类假日期，模型列表里也会混进 0 token 的型号
+        d = Path(self.tmp) / ".commandcode" / "projects" / "users-u-proj"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "s1.jsonl").write_text(
+            json.dumps({"sessionId": "s1", "model": "good-model",
+                        "timestamp": "2026-09-15T10:00:00+08:00",
+                        "usage": {"inputTokens": 10}}) + "\n" +
+            json.dumps({"sessionId": "s1", "model": "bad-model",
+                        "timestamp": "13/09/2026 10:00",
+                        "usage": {"inputTokens": 99}}) + "\n")
+        m.collect_commandcode()
+        sess = [s for s in m.sessions if s["agent"] == "commandcode"]
+        self.assertEqual(len(sess), 1)
+        self.assertNotIn("bad-model", sess[0]["modelsUsed"],
+                         "非法日期行的模型不应进会话")
+        self.assertTrue(str(sess[0]["lastActivity"]).startswith("2026-09-15"),
+                        f"lastActivity 被非法行污染：{sess[0]['lastActivity']}")
+        self.assertEqual(sess[0]["totalTokens"], 10)
+
 
 class TimestampNormalizationTest(unittest.TestCase):
     """秒/毫秒混用与非法时间戳：既要归一，也不能让异常中断整个来源"""
@@ -390,6 +472,15 @@ class TimestampNormalizationTest(unittest.TestCase):
         # 整个来源中断、剩余库全不读
         for bad in (None, 0, "", "abc", 9e18, -1):
             self.assertIsNone(m.iso_from_ts(bad), f"{bad!r} 应返回 None 而不是抛异常")
+
+    def test_hour_of_ts_survives_garbage(self):
+        # 回归点：hour_of_ts 曾直接 `ts > 1e12` 比较后再 fromtimestamp —— 字符串
+        # 时间戳会 TypeError、非法值会 ValueError，冒泡出去会让该来源剩余文件全丢
+        ts = datetime(2026, 9, 15, 13, 0, 0).timestamp()
+        self.assertEqual(m.hour_of_ts(ts), 13)
+        self.assertEqual(m.hour_of_ts(ts * 1000), 13, "毫秒应归一")
+        for bad in (None, "", "abc", 0, 9e18):
+            self.assertIsNone(m.hour_of_ts(bad), f"{bad!r} 应返回 None 而不是抛异常")
 
 
 class SourceInvariantsTest(unittest.TestCase):
@@ -414,6 +505,30 @@ class SourceInvariantsTest(unittest.TestCase):
         for fn in ("def _accum", "def add_session", "def mark", "def _warn_bad_date"):
             block = self.src.split(fn)[1].split("\ndef ", 1)[0]
             self.assertIn("_state_lock", block, f"{fn} 缺少 _state_lock")
+
+    def test_kimix_uses_iso_from_ts(self):
+        # 与 antigravity 同一类风险：kimix 的会话时间戳也曾直接 fromtimestamp，
+        # 上游一旦给毫秒就是 ValueError 冒泡、整个来源剩余文件全不解析
+        block = self.src.split("def collect_kimix")[1].split("def collect_cursor")[0]
+        bad = [ln for ln in block.splitlines()
+               if "fromtimestamp" in ln and not ln.strip().startswith("#")]
+        self.assertEqual(bad, [], "kimix 的时间戳应走 iso_from_ts")
+
+    def test_antigravity_respects_add_usage_result(self):
+        # 与 commandcode 同一类缺陷：忽略返回值 → 日期非法时"会话之和 > 日之和"
+        block = self.src.split("def collect_antigravity")[1].split("\ndef ")[0]
+        self.assertIn("if not add_usage(", block)
+
+    def test_cursor_ttl_parsed_in_one_place(self):
+        # 同一环境变量曾有两套解析（一处无 try 会抛、一处静默按 300），语义不一致
+        self.assertEqual(self.src.count('os.environ.get("USAGE_DASH_CURSOR_TTL"'), 1)
+
+    def test_warnings_go_through_lock(self):
+        # 并行采集下 warnings 的写入统一走 _warn（持锁）；只允许 _warn 定义体里
+        # 出现裸的 warnings.append
+        self.assertEqual(self.src.count("warnings.append("), 1,
+                         "除 _warn 定义体外的 warnings.append 应改为 _warn(...)")
+        self.assertIn("def _warn(", self.src)
 
 
 class DataJsConsistencyTest(unittest.TestCase):

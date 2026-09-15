@@ -83,5 +83,11 @@ node --test --test-name-pattern 成本 "tests/e2e/*.test.js"   # 只跑匹配的
 - **增量缓存**：缓存用"输入指纹"兜正确性；给 `_input_sources()` 增删输入时，
   要保证指纹能覆盖它，否则会拿旧结果。sqlite 不能用 mtime 做指纹
   （活跃 WAL 的 mtime 每几秒就变，缓存会永不命中）。
+  指纹只管"输入内容变没变"，**新鲜度交给状态缓存年龄**（`USAGE_DASH_STATE_TTL`，
+  默认 300s；`USAGE_DASH_CURSOR_TTL=0` 时不命中）。别把 TTL 塞回指纹：采集自己会
+  重写 cursor 用量 CSV，那样会变成"拉取→指纹变→下轮又未命中"，而"过期+拉取失败"
+  又会永远命中、再也不重试。`_sqlite_signature` 只对"可能读到新鲜数据却算不出签名"
+  的情形 fail-closed（直读失败且复制也失败）；库不存在 / 空库 / 表不存在都是
+  **可复现状态**，必须给稳定签名，否则整机缓存被永久禁用。
 - **无 token 来源**：`hasTokens: false` 的 agent 走"活动量"口径，
   KPI 标题、tab 可见性、图例要一起切。
