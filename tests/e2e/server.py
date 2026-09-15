@@ -78,6 +78,12 @@ def build_fixture():
          "cacheReadTokens": 0, "cacheCreationTokens": 0, "totalTokens": 1000,
          "costUsd": 1.0, "costEst": None, "events": 0,
          "modelBreakdowns": [_mb("gpt-x", 1000, 0, 0, 0, cost=1.0, has_cost=True)]},
+        # proj-old-approx：真实日粒度在 d(1)，而它的会话最后活动日在 30 天前 ——
+        # 近似行的日期只有"最后活动日"，不该把 p=all 的日期范围拉早
+        {"date": d(1), "agent": "acct", "inputTokens": 70, "outputTokens": 0,
+         "cacheReadTokens": 0, "cacheCreationTokens": 0, "totalTokens": 70,
+         "costUsd": None, "costEst": None, "events": 0,
+         "modelBreakdowns": [_mb("no-price-model", 70, 0, 0, 0, cost=0)]},
     ]
 
     project_daily = [
@@ -98,6 +104,11 @@ def build_fixture():
          "outputTokens": 0, "cacheReadTokens": 0, "cacheCreationTokens": 0,
          "totalTokens": 1000, "costUsd": 1.0, "costEst": None, "events": 0,
          "modelBreakdowns": [_mb("gpt-x", 1000, 0, 0, 0, cost=1.0, has_cost=True)]},
+        # L2 场景：真实日粒度在 d(1)，会话的最后活动日却在 30 天前
+        {"date": d(1), "agent": "acct", "project": "proj-old-approx", "inputTokens": 70,
+         "outputTokens": 0, "cacheReadTokens": 0, "cacheCreationTokens": 0,
+         "totalTokens": 70, "costUsd": None, "costEst": None, "events": 0,
+         "modelBreakdowns": [_mb("no-price-model", 70, 0, 0, 0, cost=0)]},
     ]
 
     sessions = [
@@ -132,6 +143,27 @@ def build_fixture():
          "inputTokens": 400, "outputTokens": 0, "cacheReadTokens": 0,
          "cacheCreationTokens": 0, "totalTokens": 400, "costUsd": None,
          "costEst": 0.4, "events": 0},
+        # 只有会话、但**有 token 与成本**的项目：模型下拉计数与"项目+模型"双筛选下
+        # 的成本都要跟着会话兜底走（以前 mTot 只遍历日粒度行 → 计数 0 并置灰；
+        # 合成 modelBreakdowns 又把成本写死 null → 成本整段丢失）
+        {"sessionId": "s-sesonly-tok", "agent": "est", "project": "proj-sesonly-tok",
+         "lastActivity": ts(2), "modelsUsed": ["claude-y"],
+         "inputTokens": 300, "outputTokens": 0, "cacheReadTokens": 0,
+         "cacheCreationTokens": 0, "totalTokens": 300, "costUsd": None,
+         "costEst": 0.3, "events": 0},
+        # L2：会话的最后活动日（30 天前）远早于该项目的真实日粒度（d(1)）
+        {"sessionId": "s-old-approx", "agent": "est", "project": "proj-old-approx",
+         "lastActivity": ts(30), "modelsUsed": ["claude-y"],
+         "inputTokens": 50, "outputTokens": 0, "cacheReadTokens": 0,
+         "cacheCreationTokens": 0, "totalTokens": 50, "costUsd": None,
+         "costEst": 0.05, "events": 0},
+        # L3：只有会话的项目里，一条**多模型**会话（两个模型同属 Anthropic）——
+        # 项目表曾用 `.every(modelMatch)` 把它整条计入，而 KPI/模型表只认单模型会话
+        {"sessionId": "s-sesonly-multi", "agent": "est", "project": "proj-sesonly-multi",
+         "lastActivity": ts(2), "modelsUsed": ["claude-y", "claude-z"],
+         "inputTokens": 500, "outputTokens": 0, "cacheReadTokens": 0,
+         "cacheCreationTokens": 0, "totalTokens": 500, "costUsd": None,
+         "costEst": 0.5, "events": 0},
     ]
 
     hourly = [
@@ -154,7 +186,8 @@ def build_fixture():
             {"id": "evonly", "label": "Events Only", "color": "#ef4444",
              "hasTokens": False, "hasCost": False, "source": "test"},
         ],
-        "modelDevs": {"gpt-x": "OpenAI", "claude-y": "Anthropic", "no-price-model": "Custom"},
+        "modelDevs": {"gpt-x": "OpenAI", "claude-y": "Anthropic", "claude-z": "Anthropic",
+                      "no-price-model": "Custom"},
         "daily": daily,
         "projectDaily": project_daily,
         "hourly": hourly,

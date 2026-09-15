@@ -18,6 +18,14 @@ const num = (s) => {
   return Number.isNaN(v) ? 0 : v;
 };
 
+/** n 天前的本地日期（与 tests/e2e/server.py 的 d() 同一算法） */
+const iso = (n) => {
+  const t = new Date();
+  t.setDate(t.getDate() - n);
+  const p = (x) => String(x).padStart(2, '0');
+  return `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())}`;
+};
+
 async function kpiCost(page) {
   return num(await page.text('#kpiCostVal'));
 }
@@ -193,6 +201,68 @@ describe('筛选与状态', () => {
       const kpi = num(await page.text('#kpiTotalVal'));
       assert.ok(kpi > 0, 'a=est 下钻不应归零');
     }, '?p=all&pj=proj-shared&a=est');
+
+    await withPage(async (page) => {
+      // aggProjects 那半边也要跟上：项目表该行总量必须与 KPI 同口径。
+      // 此前只有 KPI 被断言，把 aggProjects 单独改回"按项目名判重"用例不会变红
+      const kpi = num(await page.text('#kpiTotalVal'));
+      const row = num(await page.eval(`
+        const tr = document.querySelector('#projTable tbody tr');
+        return tr ? tr.children[5].textContent : '';
+      `));
+      assert.ok(kpi > 0 && row > 0, `项目表应有该行（kpi=${kpi} row=${row}）`);
+      assert.ok(Math.abs(row / kpi - 1) < 0.05,
+        `项目表该行总量(${row})应与 KPI(${kpi})同口径`);
+    }, '?p=all&pj=proj-shared');
+  });
+
+  test('仅会话级项目的成本与模型计数跟着会话兜底走（M3c）', async () => {
+    // 「项目+模型」双筛选：合成 modelBreakdowns 曾把 cost/costEst 写死 null，
+    // 模型分支只读 mb 成本 → 成本整段丢失，而同屏会话表显示真实成本
+    await withPage(async (page) => {
+      const cost = await kpiCost(page);
+      assert.ok(Math.abs(cost - 0.3) < 0.02,
+        `单模型会话的成本应无歧义归属该模型（0.3），实际 ${cost}`);
+    }, '?p=all&pj=proj-sesonly-tok&m=claude-y');
+
+    // 模型下拉的计数也要含会话兜底，否则这里全为 0 并置灰，而模型表有真实用量
+    await withPage(async (page) => {
+      const counts = await page.eval(`
+        return [...document.querySelectorAll('#modelSelPanel .cnt')].map(e => e.textContent.trim());
+      `);
+      assert.ok(counts.length > 0, '模型下拉应有条目');
+      assert.ok(counts.some(c => c !== '0' && c !== '—' && c !== ''),
+        `仅会话级项目下模型计数不应全为 0：${JSON.stringify(counts)}`);
+    }, '?p=all&pj=proj-sesonly-tok');
+  });
+
+  test('近似行的旧日期不会把 p=all 的范围拉早（L2）', async () => {
+    // proj-old-approx 的真实日粒度在 d(1)，而它的会话最后活动日在 30 天前。
+    // 切到该项目再点"全部"时，rangeStart 取的是**该项目视图**的 firstDate：
+    // 若 firstDate 取到近似行，范围会被整段拉早（连带"活跃天数"等失真）
+    await withPage(async (page) => {
+      await page.select('#projSel', 'proj-old-approx');
+      await page.click('#presetTabs button[data-p="all"]');
+      const label = await page.text('#rangeLabel');
+      const m = label.match(/(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})/);
+      assert.ok(m, `范围标签应含起止日期，实际 ${JSON.stringify(label)}`);
+      assert.equal(m[1], iso(1),
+        `范围起点应为真实日粒度最早一天 ${iso(1)}，而不是近似行的 ${iso(30)}`);
+    });
+  });
+
+  test('多模型会话在开发商筛选下与 KPI 同口径（L3）', async () => {
+    // 项目表曾用 `.every(modelMatch)` 纳入多模型会话（只要各模型都命中该开发商），
+    // 而 rebuildView 只认单模型会话 → 项目表比 KPI/模型表多出这一块
+    await withPage(async (page) => {
+      const kpi = num(await page.text('#kpiTotalVal'));
+      const row = num(await page.eval(`
+        const tr = document.querySelector('#projTable tbody tr');
+        return tr ? tr.children[5].textContent : '';
+      `));
+      assert.equal(row > 0, kpi > 0,
+        `多模型会话应与 KPI 同口径（kpi=${kpi} row=${row}）`);
+    }, '?p=all&pj=proj-sesonly-multi&m=dev:Anthropic');
   });
 
   test('事件型来源进入活动量口径', async () => {

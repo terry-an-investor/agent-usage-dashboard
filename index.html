@@ -567,7 +567,7 @@
     <div class="card-head">
       <div>
         <h2 data-i18n="projTitle">项目分布</h2>
-        <div class="hint" data-i18n="projHint">按总 token 排序 · 点击行可筛选项目 · 项目名按来源原样展示（同一项目可能分成多行）</div>
+        <div class="hint" data-i18n="projHint">按总 token 排序 · 点击行可筛选项目 · 项目名按来源原样展示（同名项目可能拆分或合并显示）</div>
       </div>
     </div>
     <div class="table-scroll" tabindex="0"><table id="projTable" style="margin-top:12px;">
@@ -700,7 +700,7 @@
       distTitle: '用量分布', distHint: '范围内各维度 token 占比 · 前 5 项',
       wkTitle: '分时活跃', wkHint: '星期 × 小时 · 仅含小时粒度来源',
       thTime: '时间', unpriced: '未定价', distOther: '其他', devOther: '其他',
-      projTitle: '项目分布', projHint: '按总 token 排序 · 点击行可筛选项目 · 项目名按来源原样展示（同一项目可能分成多行）', thProject: '项目',
+      projTitle: '项目分布', projHint: '按总 token 排序 · 点击行可筛选项目 · 项目名按来源原样展示（同名项目可能拆分或合并显示）', thProject: '项目',
       thAgent: 'Agent', thSessions: '会话', thDays: '天数', thEvents: '活动',
       thSource: '数据来源', thHasTokens: 'Token', thHasCost: '成本', thNote2: '说明',
 
@@ -776,7 +776,7 @@
       distTitle: 'Distribution', distHint: 'Token share per dimension in range · top 5',
       wkTitle: 'Activity by Hour', wkHint: 'Weekday × hour · sources with hour granularity only',
       thTime: 'Time', unpriced: 'Unpriced', distOther: 'Other', devOther: 'Other',
-      projTitle: 'Projects', projHint: 'Sorted by total tokens · click a row to filter · names are shown as each source reports them (one project may split into rows)', thProject: 'Project',
+      projTitle: 'Projects', projHint: 'Sorted by total tokens · click a row to filter · names are shown as each source reports them (a project may be split or merged)', thProject: 'Project',
       thAgent: 'Agent', thSessions: 'Sessions', thDays: 'Days', thEvents: 'Events',
       thSource: 'Source', thHasTokens: 'Tokens', thHasCost: 'Cost', thNote2: 'Note',
 
@@ -945,6 +945,13 @@
   // ---------- View state ----------
   const rawDaily = D.daily;            // [{date, agent, ...tokens, costUsd, events, modelBreakdowns}]
   const rawProjDaily = D.projectDaily || [];  // [{date, agent, project, ...}]
+  // 判断"该来源是否已有项目级日粒度"必须按 (agent, project) **组合**：
+  // 同一个项目名可能被多个来源共用（cursor 既有 cursor.com 的日粒度，又有
+  // cursor cloud agent 这类只有会话的项目；不同 agent 也可能撞同名项目）。
+  // 只按项目名判断，会把"没有日粒度那个 agent"的会话整段挡住 ——
+  // 表现为项目下钻空态 / 总量偏少，而 KPI 会话数仍非零。
+  // 提到顶层共享：rebuildView / aggProjects / 模型下拉计数三处必须逐字同口径。
+  const dailyPairs = new Set(rawProjDaily.map(r => r.agent + '\u0000' + r.project));
   let agentSel = 'all', selModel = 'all', projSel = 'all';
   let daily = [], byDate = {}, firstDate = todayStr;
   let hasTok = true;                    // 当前筛选+范围内是否有 token 数据
@@ -952,12 +959,6 @@
   let viewRows = [];                    // agent+project 过滤后的源行（供 Agent 表等复用）
 
   function rebuildView() {
-    // 判断"该来源是否已有项目级日粒度"必须按 (agent, project) **组合**：
-    // 同一个项目名可能被多个来源共用（cursor 既有 cursor.com 的日粒度，又有
-    // cursor cloud agent 这类只有会话的项目；不同 agent 也可能撞同名项目）。
-    // 只按项目名判断，会把"没有日粒度那个 agent"的会话整段挡住 ——
-    // 表现为项目下钻空态 / 总量偏少，而 KPI 会话数仍非零。
-    const dailyPairs = new Set(rawProjDaily.map(r => r.agent + '\u0000' + r.project));
     let src = (projSel === 'all' ? rawDaily : rawProjDaily)
       .filter(r => (agentSel === 'all' || r.agent === agentSel) &&
                    (projSel === 'all' || r.project === projSel));
@@ -989,12 +990,17 @@
           totalTokens: s.totalTokens || 0,
           costUsd: s.costUsd ?? null, costEst: s.costEst ?? null,
           events: s.events || 0,
-          // 单模型会话给出等量的 modelBreakdowns，否则留空（不虚构占比）
+          _approx: true,          // 近似行：日期只有"最后活动日"（不该参与 firstDate）
+          // 单模型会话给出等量的 modelBreakdowns，否则留空（不虚构占比）。
+          // 成本一并带过去：单模型会话的成本可以无歧义归属该模型，否则
+          // "项目+模型"双筛选下模型分支只读 mb 成本 → 成本整段丢失，
+          // 同屏会话表却显示真实成本（跨视图不一致）
           modelBreakdowns: single ? [{
             modelName: mus[0], inputTokens: s.inputTokens || 0,
             outputTokens: s.outputTokens || 0, cacheReadTokens: s.cacheReadTokens || 0,
             cacheCreationTokens: s.cacheCreationTokens || 0,
-            cost: null, costEst: null, hasCost: false,
+            cost: s.costUsd ?? null, costEst: s.costEst ?? null,
+            hasCost: s.costUsd != null,
           }] : [],
         };
       }));
@@ -1010,7 +1016,10 @@
         d = map[r.date] = {
           date: r.date, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0,
           cacheCreationTokens: 0, totalTokens: 0, costUsd: null, costEst: null, events: 0, _m: {},
+          _approx: !!r._approx,     // 该天是否只由"会话兜底近似行"构成
         };
+      } else {
+        d._approx = d._approx && !!r._approx;
       }
       if (selModel === 'all') {
         d.inputTokens += r.inputTokens; d.outputTokens += r.outputTokens;
@@ -1052,7 +1061,10 @@
     daily = Object.values(map).sort((a, b) => a.date < b.date ? -1 : 1)
       .map(d => ({ ...d, modelBreakdowns: Object.values(d._m) }));
     byDate = Object.fromEntries(daily.map(d => [d.date, d]));
-    firstDate = daily.length ? daily[0].date : todayStr;
+    // 兜底近似行的日期只有"最后活动日"，不代表该项目真实的起始时间：拿它算
+    // firstDate 会把 p=all 的范围拉早（进而影响"活跃天数"等）。只用真实日粒度行。
+    const realDays = daily.filter(d => !d._approx);
+    firstDate = ((realDays[0] || daily[0] || {}).date) || todayStr;
     const meta = agentSel === 'all' ? null : AGENTS[agentSel];
     hasTokBase = projSel === 'all'
       ? (!meta || meta.hasTokens !== false)
@@ -1202,6 +1214,21 @@
       if (r.date < rangeStart || r.date > rangeEnd) continue;
       for (const mb of r.modelBreakdowns || [])
         mTot[mb.modelName] = (mTot[mb.modelName] || 0) + mb.inputTokens + mb.outputTokens + mb.cacheReadTokens + (mb.cacheCreationTokens || 0);
+    }
+    // 与 rebuildView 同口径：仅会话级项目（该 (agent, project) 没有日粒度）的
+    // 单模型会话也要计入，否则下钻到这类项目时下拉计数全是 0（置灰），
+    // 而模型表里明明有真实用量
+    if (projSel !== 'all') {
+      for (const s of D.sessions || []) {
+        if (s.project !== projSel) continue;
+        if (agentSel !== 'all' && s.agent !== agentSel) continue;
+        if (dailyPairs.has(s.agent + '\u0000' + s.project)) continue;
+        const day = (s.lastActivity || '').slice(0, 10);
+        if (day && (day < rangeStart || day > rangeEnd)) continue;
+        const mus = s.modelsUsed || [];
+        if (mus.length !== 1) continue;      // 多模型会话不拆（与 rebuildView 一致）
+        mTot[mus[0]] = (mTot[mus[0]] || 0) + (s.totalTokens || 0);
+      }
     }
     // 模型下拉：树形（开发商 → 模型，默认折叠）
     const byDev = {};
@@ -1504,7 +1531,9 @@
       document.getElementById('kpiCacheSub').innerHTML =
         `${S.nCacheRead} <b>${fmt(cr)}</b>`;
       document.getElementById('kpiCostVal').innerHTML =
-        costCell(costKnown ? costRec : null, estKnown ? costEst : null)
+        // 这里已在"有 token"的分支里：没有价目也没有记账成本时该显示「未定价」，
+        // 而不是与"无 token"混用同一个 —（两种空态语义不同）
+        costCell(costKnown ? costRec : null, estKnown ? costEst : null, true)
         + ((costKnown || estKnown) ? deltaSpan(cost, pCost) : '');
       document.getElementById('kpiCostSub').innerHTML = (costKnown || estKnown)
         ? `${S.kpiAvgDaily} <b>${fmtCost(cost / Math.max(days.length, 1))}</b> · ${S.kpiStreakCur} <b>${curStreak} ${S.kpiDaysUnit}</b> (${S.kpiStreakMax} ${rangeBestStreak} ${S.kpiDaysUnit})`
@@ -1747,7 +1776,7 @@
             `<td>${isEv ? '—' : fmt(a.cr)}</td>` +
             `<td><b>${isEv ? '—' : fmt(a.tot)}</b></td>` +
             `<td>${a.ev ? fmt(a.ev) : '—'}</td>` +
-            `<td style="color:var(--dim)">${costCell(a.hc ? a.cost : null, a.he ? a.est : null)}</td>` +
+            `<td style="color:var(--dim)">${costCell(a.hc ? a.cost : null, a.he ? a.est : null, a.tot > 0)}</td>` +
             `</tr>`;
         }).join('')
       : `<tr><td colspan="10" style="text-align:left;color:var(--dim)">${S.noRangeRecords}</td></tr>`;
@@ -1764,9 +1793,6 @@
   function aggProjects() {
     const inRange = d => d >= rangeStart && d <= rangeEnd;
     const agg = {};
-    // 与 rebuildView 同口径：按 (agent, project) 组合判断该来源是否已有日粒度。
-    // 一个项目名可能同时被多个 agent 使用，只按项目名判断会丢掉"只有会话"那个 agent 的量
-    const dailyPairs = new Set(rawProjDaily.map(r => r.agent + '\u0000' + r.project));
     for (const r of rawProjDaily) {
       if (!inRange(r.date)) continue;
       if (agentSel !== 'all' && r.agent !== agentSel) continue;
@@ -1804,9 +1830,15 @@
       p.sess++;
       p.agents.add(s.agent);
       if (!dailyPairs.has(s.agent + '\u0000' + s.project)) {
-        // 无项目级日粒度的来源用会话总量近似；模型筛选下仅当会话全部模型都命中才归属
-        // （多模型会话无法拆出单模型份额，宁可不计也不虚高）
-        if (selModel === 'all' || (s.modelsUsed || []).every(modelMatch)) {
+        // 无项目级日粒度的来源用会话总量近似。注意近似行的日期只有"最后活动日"
+        // 可用（会话没记起始日），因此它不代表项目真实的起始时间，也不该参与
+        // firstDate —— 见 rebuildView 里 firstDate 的注释。总量本身跨多天时，
+        // 日柱图会集中在该日偏高；不按天数摊平是为了不制造假精度。
+        // 模型筛选下只有"整个会话就用一个模型"才能无歧义归属（与 rebuildView 逐字
+        // 同口径）；多模型会话拆不出单模型份额，宁可不计也不虚高 —— 否则项目表
+        // 会比 KPI/模型表多出这一块。
+        const mus = s.modelsUsed || [];
+        if (selModel === 'all' || (mus.length === 1 && modelMatch(mus[0]))) {
           p.tot += s.totalTokens; p.ev += s.events || 0;
           if (day) p.days.add(day);
           if (s.costUsd != null) { p.cost += s.costUsd; p.hc = true; }
@@ -1834,7 +1866,7 @@
             `<td>${p.days.size}</td><td>${p.sess}</td>` +
             `<td><b>${p.tot ? fmt(p.tot) : '—'}</b></td>` +
             `<td>${p.ev ? fmt(p.ev) : '—'}</td>` +
-            `<td style="color:var(--dim)">${costCell(p.hc ? p.cost : null, p.he ? p.est : null)}</td>` +
+            `<td style="color:var(--dim)">${costCell(p.hc ? p.cost : null, p.he ? p.est : null, p.tot > 0)}</td>` +
             `</tr>`;
         }).join('')
       : `<tr><td colspan="8" style="text-align:left;color:var(--dim)">${S.noRangeRecords}</td></tr>`;
@@ -2010,7 +2042,7 @@
     mTbody.innerHTML = hasTok
       ? rows.map(([k, m]) =>
           `<tr><td style="text-align:left;font-weight:600">${k}</td><td>${fmt(m.input)}</td><td>${fmt(m.output)}</td>` +
-          `<td>${fmt(m.cacheRead)}</td><td><b>${fmt(m.total)}</b></td><td style="color:var(--dim)">${costCell(m.hc ? m.cost : null, m.he ? m.est : null)}</td></tr>`
+          `<td>${fmt(m.cacheRead)}</td><td><b>${fmt(m.total)}</b></td><td style="color:var(--dim)">${costCell(m.hc ? m.cost : null, m.he ? m.est : null, m.total > 0)}</td></tr>`
         ).join('')
       : rows.map(([k, m]) =>
           `<tr><td style="text-align:left;font-weight:600">${k}</td><td colspan="4" style="color:var(--dim)">${S.kpiNoToken}</td>` +
