@@ -18,6 +18,7 @@ import time
 import unittest
 from datetime import datetime
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -280,6 +281,115 @@ class IncrementalCacheTest(unittest.TestCase):
             import pickle
             pickle.dump(payload, f)
         self.assertIsNone(m._load_state("fp"))
+
+    def test_absent_db_is_a_stable_signature(self):
+        # 库不存在是一个**可复现的状态**，不能被当成"读不出来"而永久禁掉缓存
+        sig = m._sqlite_signature(Path(self.tmp) / "nope.db", "t")
+        self.assertIsNotNone(sig, "不存在的库应有稳定签名（否则缓存永不命中）")
+        self.assertEqual(sig, m._sqlite_signature(Path(self.tmp) / "nope.db", "t"))
+
+    def test_fingerprint_fails_closed_when_db_unreadable(self):
+        # 库存在但签名读不出来（如 -shm 不可写）时，_open_ro 仍可能回退到复制库
+        # 读到**新鲜数据**；此时若指纹记成固定值，缓存会永久命中 → 页面停在旧数字。
+        # 因此必须 fail-closed：整个指纹放弃复用。
+        bogus = Path(self.tmp) / "bogus.db"
+        bogus.write_text("not a database")
+        with mock.patch.object(m, "_input_sources",
+                               return_value=[(str(bogus), "db", "t")]):
+            self.assertIsNone(m._input_fingerprint("x"),
+                              "签名取不到时指纹必须 fail-closed（返回 None）")
+
+    def test_none_fingerprint_never_hits_or_writes_cache(self):
+        m._save_state(None, "raw")
+        self.assertFalse(m.STATE_CACHE.exists(),
+                         "指纹不可用时不应写出状态缓存（否则下次会被 None 命中）")
+        self.assertIsNone(m._load_state(None))
+
+    def test_stale_cursor_cache_invalidates_fingerprint(self):
+        # cursor 用量 CSV 是网络缓存：过了 TTL 就该重新拉取。而拉取只发生在
+        # "缓存未命中"时，若指纹只看 CSV 的 (size, mtime)，命中期就再也不会拉 →
+        # 数据永远停在上一次（自我循环）。这里文件**字节与 mtime 都不变**，
+        # 只让 TTL 判定从"新鲜"变成"过期"，指纹就必须随之变化。
+        m.CURSOR_CACHE.write_text("x")
+        with mock.patch.dict(os.environ, {"USAGE_DASH_CURSOR_TTL": "300"}):
+            fresh = m._input_fingerprint("x")
+            self.assertEqual(fresh, m._input_fingerprint("x"),
+                             "CSV 新鲜时指纹应当稳定（缓存要能命中）")
+        with mock.patch.dict(os.environ, {"USAGE_DASH_CURSOR_TTL": "0"}):
+            expired = m._input_fingerprint("x")
+        self.assertNotEqual(fresh, expired,
+                            "cursor 缓存过期后指纹必须变化，否则缓存永不失效")
+
+    def test_saved_fingerprint_reflects_post_collection_inputs(self):
+        # 回归点：指纹在采集**前**算、状态在采集**后**存 —— 而采集过程本身会改写
+        # 输入（cursor 用量 CSV 就是在拉取时重写的）。沿用采集前的指纹，
+        # 下次算出的必然不同 → 每次真实拉取后都白付一次全量重算。
+        before = m._input_fingerprint("x")
+        m.CURSOR_CACHE.write_text("fetched-during-collection")   # 模拟采集改写了输入
+        saved = m._save_state_after_collection("x")
+        self.assertNotEqual(saved, before, "夹具本身应让输入发生变化")
+        self.assertEqual(saved, m._input_fingerprint("x"),
+                         "保存的指纹必须与下次算出的一致，否则缓存命中不了")
+        self.assertIsNotNone(m._load_state(m._input_fingerprint("x")),
+                             "按采集后指纹保存的缓存应当能命中")
+
+
+class _TmpHomeTest(unittest.TestCase):
+    """把采集器的 HOME 指到临时目录，好在真实解析路径上做行为断言"""
+
+    def setUp(self):
+        _reset_state()
+        self.tmp = tempfile.mkdtemp()
+        self._home = m.HOME
+        m.HOME = Path(self.tmp)
+
+    def tearDown(self):
+        m.HOME = self._home
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+
+class BadDateGranularityTest(_TmpHomeTest):
+    """回归点：非法日期的行不能只进会话汇总，否则"会话之和 > 日之和" """
+
+    def _write_cc_line(self, ts):
+        d = Path(self.tmp) / ".commandcode" / "projects" / "users-u-proj"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "s1.jsonl").write_text(json.dumps({
+            "sessionId": "s1", "model": "m", "timestamp": ts,
+            "usage": {"inputTokens": 100, "outputTokens": 50},
+        }) + "\n")
+
+    def test_commandcode_bad_date_not_counted_in_session(self):
+        # 曾经的写法：tot[...] 累加在 `if not add_usage(...): continue` **之前**，
+        # 于是被守卫挡掉的行仍然累进会话总量（实测 53 条会话 6.5 亿 token 只进会话）
+        self._write_cc_line("13/09/2026 10:00")
+        m.collect_commandcode()
+        self.assertEqual([k for k in m.daily_rows if k[1] == "commandcode"], [],
+                         "非法日期不应产出日粒度行")
+        self.assertEqual(sum(s["totalTokens"] for s in m.sessions), 0,
+                         "非法日期不应把 token 计入会话汇总")
+
+    def test_commandcode_valid_date_still_counted(self):
+        self._write_cc_line("2026-09-15T10:00:00+08:00")
+        m.collect_commandcode()
+        self.assertEqual([k for k in m.daily_rows if k[1] == "commandcode"],
+                         [("2026-09-15", "commandcode")])
+        self.assertEqual(sum(s["totalTokens"] for s in m.sessions), 150)
+
+
+class TimestampNormalizationTest(unittest.TestCase):
+    """秒/毫秒混用与非法时间戳：既要归一，也不能让异常中断整个来源"""
+
+    def test_seconds_and_millis_agree(self):
+        ts = datetime(2026, 9, 15, 12, 0, 0).timestamp()
+        self.assertTrue(m.iso_from_ts(ts).startswith("2026-09-15T"))
+        self.assertEqual(m.iso_from_ts(ts * 1000), m.iso_from_ts(ts))
+
+    def test_garbage_returns_none_instead_of_raising(self):
+        # 曾经：antigravity 直接 datetime.fromtimestamp(毫秒) → ValueError 冒泡，
+        # 整个来源中断、剩余库全不读
+        for bad in (None, 0, "", "abc", 9e18, -1):
+            self.assertIsNone(m.iso_from_ts(bad), f"{bad!r} 应返回 None 而不是抛异常")
 
 
 class SourceInvariantsTest(unittest.TestCase):

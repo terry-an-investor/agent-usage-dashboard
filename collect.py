@@ -396,6 +396,27 @@ def hour_of_ts(ts):
     return datetime.fromtimestamp(ts).hour
 
 
+def iso_from_ts(ts):
+    """epoch 秒或毫秒 -> 本地 ISO 时间串；无法解析时返回 None（不抛异常）
+
+    各来源的时间戳单位并不统一（devin / antigravity 都出现过毫秒值），而
+    `datetime.fromtimestamp(毫秒)` 会直接抛 ValueError —— 采集跑在线程池里，
+    一旦抛出，该来源剩下的文件就都不再解析了，所以这里必须自己兜住。
+    """
+    try:
+        v = float(ts)
+    except (TypeError, ValueError):
+        return None
+    if not v or v <= 0:
+        return None
+    if v > 1e12:
+        v /= 1000.0
+    try:
+        return datetime.fromtimestamp(v).astimezone().isoformat()
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
 def _fresh(inp, cr):
     """部分来源的 inputTokens 含 cacheRead（commandcode/dimcode/kimix），
     归一化为 ccusage 口径：input = 未命中缓存的新输入，cacheRead 单列。
@@ -628,14 +649,17 @@ def collect_commandcode():
                     cr = u.get("cacheReadTokens") or u.get("cache_read_input_tokens") or 0
                     cc = u.get("cacheWriteTokens") or u.get("cache_creation_input_tokens") or 0
                     cost = u.get("costUsd")
-                    tot["i"] += _fresh(inp, cr); tot["o"] += out; tot["cr"] += cr; tot["cc"] += cc
-                    if cost is not None:
-                        tot["cost"] += cost; tot["has_cost"] = True
                     if not add_usage(date, "commandcode", project=proj_short,
                                      hour=hour_of_iso(ts),
                                      inp=_fresh(inp, cr), out=out,
                                      cr=cr, cc=cc, cost=cost, model=model):
-                        continue   # 日期非法：不要只进会话汇总
+                        # 日期非法：整行跳过。累加必须放在守卫**之后**，
+                        # 否则被挡掉的行仍会进会话汇总（会话之和 > 日之和）
+                        continue
+                    tot["i"] += _fresh(inp, cr); tot["o"] += out
+                    tot["cr"] += cr; tot["cc"] += cc
+                    if cost is not None:
+                        tot["cost"] += cost; tot["has_cost"] = True
         except Exception as e:
             warnings.append(f"commandcode 解析失败（该文件剩余行已跳过）: {fp.name}: {e}")
             continue
@@ -1329,13 +1353,13 @@ def collect_antigravity(tmpdir):
                 except Exception:
                     continue
             if sess["n"]:
-                add_session(agent, fp.stem,
-                            project=project or agent,
-                            last=datetime.fromtimestamp(
-                                sess["last"]).isoformat(),
-                            models=sorted(sess["models"]),
-                            inp=sess["i"], out=sess["o"], cr=sess["cr"],
-                            events=sess["n"])
+                last = iso_from_ts(sess["last"])
+                if last:
+                    add_session(agent, fp.stem,
+                                project=project or agent, last=last,
+                                models=sorted(sess["models"]),
+                                inp=sess["i"], out=sess["o"], cr=sess["cr"],
+                                events=sess["n"])
     for agent in found:
         mark(agent, tokens=True)
 
@@ -1347,7 +1371,7 @@ def collect_antigravity(tmpdir):
 # 指纹没变 ⇒ 上次的聚合结果仍然完整有效，直接反序列化（~20ms）跳过全部解析；
 # 指纹变了 ⇒ 全量重算并覆盖缓存。这样"数据没变时的刷新"是亚秒级的，
 # 而正确性由指纹兜底：任何新增/修改/删除/换登录态都会让指纹失效。
-CACHE_VERSION = 2
+CACHE_VERSION = 3    # 3: 指纹含 db 的存在性签名与 cursor 缓存新鲜度
 STATE_CACHE = DIR / ".cache" / "collect-state.pkl"
 
 _INPUT_GLOBS = (
@@ -1388,29 +1412,64 @@ def _sqlite_signature(path, table):
     局限：只 UPDATE、不新增行的改动检测不到；本采集读取的列都在 INSERT 时写入，
     受影响的只有 devin.created_at 这类兜底字段。
     """
+    if not os.path.exists(path):
+        # 库不存在是一个**可复现的状态**：必须给出稳定签名，
+        # 否则没装某个 agent 的机器上指纹算不出来，增量缓存会被永久禁用
+        return ("absent",)
     try:
         con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
         try:
-            return con.execute(
+            cnt, mx = con.execute(
                 f'SELECT COUNT(*), IFNULL(MAX(rowid), 0) FROM "{table}"').fetchone()
+            return ("ok", cnt, mx)
         finally:
             con.close()
     except Exception:
+        # 库存在但签名读不出来（如 -shm 不可写）：_open_ro 仍可能回退到复制库读到
+        # **新鲜数据**，而指纹若在这里给个固定值，缓存就会永久命中、页面静默停在
+        # 旧数字。返回 None 让 _input_fingerprint 整体 fail-closed。
         return None
 
 
+def _cursor_cache_stale():
+    """cursor 用量 CSV 是否已过 TTL。
+
+    这张 CSV 是网络缓存，而"重新拉取"只发生在缓存未命中时 —— 如果指纹只看它的
+    (size, mtime)，命中期就永远不会重新拉，数据会停在上一次（自我循环）。
+    把"是否过期"纳入指纹即可打破循环：新鲜时指纹稳定（仍可 0.2s 命中），
+    过期时指纹变化 → 重新采集并拉取。
+    """
+    try:
+        ttl = int(os.environ.get("USAGE_DASH_CURSOR_TTL", "300"))
+    except ValueError:
+        ttl = 300
+    if ttl <= 0:
+        return True          # TTL=0 语义就是"每次都拉最新"
+    try:
+        return time.time() - CURSOR_CACHE.stat().st_mtime >= ttl
+    except OSError:
+        return True          # 没有缓存文件，本来就要拉
+
+
 def _input_fingerprint(ccusage_raw):
-    """输入指纹。任何新增/修改/删除都会改变它，从而让缓存失效。"""
+    """输入指纹。任何新增/修改/删除都会改变它，从而让缓存失效。
+
+    算不完整时返回 None（宁可不用缓存，也不用错缓存）。
+    """
     items = []
     for path, kind, table in _input_sources():
         if kind == "db":
-            items.append((path, _sqlite_signature(path, table)))
+            sig = _sqlite_signature(path, table)
+            if sig is None:
+                return None
+            items.append((path, sig))
         else:
             try:
                 st = os.stat(path)
                 items.append((path, st.st_size, st.st_mtime_ns))
             except OSError:
                 items.append((path, None))
+    items.append(("cursor-stale", _cursor_cache_stale()))
     items.append(("ccusage", hashlib.sha256((ccusage_raw or "").encode()).hexdigest()))
     return hashlib.sha256(repr(sorted(items, key=repr)).encode()).hexdigest()
 
@@ -1431,6 +1490,8 @@ def _thaw_rows(frozen, factory):
 
 
 def _save_state(fingerprint, ccusage_raw):
+    if fingerprint is None:
+        return            # 指纹不可用：不写缓存，否则下次会被 None 命中
     try:
         STATE_CACHE.parent.mkdir(exist_ok=True)
         payload = {
@@ -1454,7 +1515,21 @@ def _save_state(fingerprint, ccusage_raw):
         warnings.append(f"增量缓存写入失败（不影响本次结果）: {e}")
 
 
+def _save_state_after_collection(ccusage_raw):
+    """按**采集后**的输入状态保存缓存，返回实际写入的指纹（不可用时 None）。
+
+    采集过程本身会改写输入：cursor 用量 CSV 就是"拉取时重写"的。若沿用采集前
+    算出的指纹，下次刷新算出的指纹必然不同 → 每次真实拉取之后都要白付一次
+    全量重算（实测 0.2s 变 1.1s）。
+    """
+    fp = _input_fingerprint(ccusage_raw)
+    _save_state(fp, ccusage_raw)     # 内部对 None 已防御
+    return fp
+
+
 def _load_state(fingerprint):
+    if fingerprint is None:
+        return None       # 指纹不可用：不许命中缓存（fail-closed）
     try:
         with open(STATE_CACHE, "rb") as f:
             p = pickle.load(f)
@@ -1486,6 +1561,10 @@ def main():
     # ccusage 先单独跑：它的输出既参与输入指纹，也是缓存未命中时的必需输入（仅 ~0.1s）
     ccusage_raw = _ccusage_raw()
     fingerprint = _input_fingerprint(ccusage_raw)
+    if fingerprint is None:
+        # fail-closed：宁可每次全量重算，也不要拿不准输入变化却复用旧结果
+        print("输入指纹不可用（某来源读不到签名），本次全量重算且不写缓存",
+              file=sys.stderr)
     cached = _load_state(fingerprint)
     if cached is not None:
         _restore_state(cached)
@@ -1514,7 +1593,7 @@ def main():
                         warnings.append(f"{futures[fut]} 采集异常: {e}")
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
-        _save_state(fingerprint, ccusage_raw)
+        _save_state_after_collection(ccusage_raw)
 
     prices, dev_map = load_prices()
     if prices:
