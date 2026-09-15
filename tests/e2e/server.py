@@ -164,6 +164,14 @@ def build_fixture():
          "inputTokens": 500, "outputTokens": 0, "cacheReadTokens": 0,
          "cacheCreationTokens": 0, "totalTokens": 500, "costUsd": None,
          "costEst": 0.5, "events": 0},
+        # 同一个项目（proj-a）的另一种写法：不同来源的命名风格不同
+        # （真实案例：Desktop/trading-logic / ~/desktop-trading-logic / trading-logic），
+        # 展示层必须把它们合并成一行，并优先用"像路径"的那个当代表名
+        {"sessionId": "s-proj-a-alt", "agent": "est", "project": "Projects/proj-a",
+         "lastActivity": ts(1), "modelsUsed": ["claude-y"],
+         "inputTokens": 120, "outputTokens": 0, "cacheReadTokens": 0,
+         "cacheCreationTokens": 0, "totalTokens": 120, "costUsd": None,
+         "costEst": 0.12, "events": 0},
     ]
 
     hourly = [

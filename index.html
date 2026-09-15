@@ -921,13 +921,67 @@
   // ---------- View state ----------
   const rawDaily = D.daily;            // [{date, agent, ...tokens, costUsd, events, modelBreakdowns}]
   const rawProjDaily = D.projectDaily || [];  // [{date, agent, project, ...}]
-  // 判断"该来源是否已有项目级日粒度"必须按 (agent, project) **组合**：
+  // ---------- 项目名归并（展示层） ----------
+  // 同一个真实项目在不同来源下写法不同：
+  //   Desktop/trading-logic     dimcode / devin（取路径末两段）
+  //   ~/desktop-trading-logic   commandcode（扁平化目录名，已全小写）
+  //   trading-logic             antigravity（取 workspace URI 末段）
+  // 采集侧无法无损还原（cursor transcript 里没有路径字段、扁平名已丢大小写），
+  // 所以归并放在展示层：把名字切成小写段序列，**一个是另一个的后缀**即视为同一项目。
+  // 只允许两边都 ≥2 段的序列参与合并：1 段的短名（如 "dashboard"）会吞掉所有
+  // "...-dashboard" 项目 —— 那正是 7150264 修过的撞标签缺陷。
+  // worktree 变体不会被吞：desktop-trading-logic-wt-trainer 的末两段是 wt-trainer。
+  const projSegs = (name) => String(name || '')
+    .replace(/^~[\/-]?/, '')
+    .split(/[\/\-_\s]+/)
+    .filter(Boolean)
+    .map(s => s.toLowerCase());
+
+  const _segSuffix = (short, long) => {
+    if (short.length > long.length) return false;
+    for (let i = 1; i <= short.length; i++) {
+      if (short[short.length - i] !== long[long.length - i]) return false;
+    }
+    return true;
+  };
+
+  const projGroupOf = (() => {
+    const names = new Set();
+    for (const r of rawProjDaily) if (r.project) names.add(r.project);
+    for (const s of D.sessions || []) if (s.project) names.add(s.project);
+    // 代表名优先"信息更完整的路径形态"：
+    //   Desktop/trading-logic（2）> ~/desktop-trading-logic（1）> trading-logic（0）
+    // 否则段数最多的扁平化名（如 --Users-xxx-dim-agent--）会当上代表名，
+    // 界面上就会出现又长又难认的那个写法
+    const repRank = (n) => {
+      const hasSlash = n.includes('/');
+      if (hasSlash && !n.startsWith('~')) return 2;
+      return hasSlash ? 1 : 0;
+    };
+    const items = [...names].map(n => ({ name: n, segs: projSegs(n) }))
+      .sort((a, b) => (repRank(b.name) - repRank(a.name)) ||
+                      (b.segs.length - a.segs.length) || (a.name < b.name ? -1 : 1));
+    const groups = [];
+    const rep = new Map();
+    for (const it of items) {
+      const hit = it.segs.length >= 2
+        ? groups.find(g => g.segs.length >= 2 &&
+            (_segSuffix(it.segs, g.segs) || _segSuffix(g.segs, it.segs)))
+        : null;
+      if (hit) { rep.set(it.name, hit.name); continue; }
+      groups.push({ name: it.name, segs: it.segs });
+      rep.set(it.name, it.name);
+    }
+    return (name) => rep.get(name) || name;
+  })();
+
+  // 判断"该来源是否已有项目级日粒度"必须按 (agent, 项目组) **组合**：
   // 同一个项目名可能被多个来源共用（cursor 既有 cursor.com 的日粒度，又有
   // cursor cloud agent 这类只有会话的项目；不同 agent 也可能撞同名项目）。
   // 只按项目名判断，会把"没有日粒度那个 agent"的会话整段挡住 ——
   // 表现为项目下钻空态 / 总量偏少，而 KPI 会话数仍非零。
   // 提到顶层共享：rebuildView / aggProjects / 模型下拉计数三处必须逐字同口径。
-  const dailyPairs = new Set(rawProjDaily.map(r => r.agent + '\u0000' + r.project));
+  const dailyPairs = new Set(rawProjDaily.map(r => r.agent + '\u0000' + projGroupOf(r.project)));
   let agentSel = 'all', selModel = 'all', projSel = 'all';
   let daily = [], byDate = {}, firstDate = todayStr;
   let hasTok = true;                    // 当前筛选+范围内是否有 token 数据
@@ -937,15 +991,15 @@
   function rebuildView() {
     let src = (projSel === 'all' ? rawDaily : rawProjDaily)
       .filter(r => (agentSel === 'all' || r.agent === agentSel) &&
-                   (projSel === 'all' || r.project === projSel));
+                   (projSel === 'all' || projGroupOf(r.project) === projSel));
     // 只存在于会话记录里的用量（ccusage 来源没有项目级日粒度，见 aggProjects 的兜底）：
     // 用会话总量近似，口径与 aggProjects 一致。注意不能只在"没有任何日粒度行"时才补 ——
     // 同名项目下另一个 agent 的量同样要补进来，否则下钻看不到它。
     if (projSel !== 'all') {
       const sess = (D.sessions || []).filter(s => {
-        if (s.project !== projSel) return false;
+        if (projGroupOf(s.project) !== projSel) return false;
         if (agentSel !== 'all' && s.agent !== agentSel) return false;
-        if (dailyPairs.has(s.agent + '\u0000' + s.project)) return false;  // 该来源已有日粒度，避免重复计
+        if (dailyPairs.has(s.agent + '\u0000' + projGroupOf(s.project))) return false;  // 该来源已有日粒度，避免重复计
         if (selModel === 'all') return true;
         // 模型级无法从一个多模型会话里拆分出来：只在"整个会话就用一个模型"时归属，
         // 否则宁可不显示，避免把用量全算到某一个模型头上（与 aggProjects 同口径）
@@ -959,7 +1013,7 @@
         const single = mus.length === 1;
         return {
           date: (s.lastActivity || '').slice(0, 10) || todayStr,
-          agent: s.agent, project: s.project,
+          agent: s.agent, project: projGroupOf(s.project),
           inputTokens: s.inputTokens || 0, outputTokens: s.outputTokens || 0,
           cacheReadTokens: s.cacheReadTokens || 0,
           cacheCreationTokens: s.cacheCreationTokens || 0,
@@ -1051,7 +1105,7 @@
   function filteredHourly() {
     return (D.hourly || []).filter(r =>
       (agentSel === 'all' || r.agent === agentSel) &&
-      (projSel === 'all' || r.project === projSel) &&
+      (projSel === 'all' || projGroupOf(r.project) === projSel) &&
       modelMatch(r.model));
   }
 
@@ -1186,7 +1240,7 @@
     const mSrc = projSel === 'all' ? rawDaily : rawProjDaily;
     for (const r of mSrc) {
       if (agentSel !== 'all' && r.agent !== agentSel) continue;
-      if (projSel !== 'all' && r.project !== projSel) continue;
+      if (projSel !== 'all' && projGroupOf(r.project) !== projSel) continue;
       if (r.date < rangeStart || r.date > rangeEnd) continue;
       for (const mb of r.modelBreakdowns || [])
         mTot[mb.modelName] = (mTot[mb.modelName] || 0) + mb.inputTokens + mb.outputTokens + mb.cacheReadTokens + (mb.cacheCreationTokens || 0);
@@ -1196,9 +1250,9 @@
     // 而模型表里明明有真实用量
     if (projSel !== 'all') {
       for (const s of D.sessions || []) {
-        if (s.project !== projSel) continue;
+        if (projGroupOf(s.project) !== projSel) continue;
         if (agentSel !== 'all' && s.agent !== agentSel) continue;
-        if (dailyPairs.has(s.agent + '\u0000' + s.project)) continue;
+        if (dailyPairs.has(s.agent + '\u0000' + projGroupOf(s.project))) continue;
         const day = (s.lastActivity || '').slice(0, 10);
         if (day && (day < rangeStart || day > rangeEnd)) continue;
         const mus = s.modelsUsed || [];
@@ -1225,11 +1279,15 @@
 
     const pTot = {};
     for (const r of rawProjDaily)
-      if (agentSel === 'all' || r.agent === agentSel)
-        pTot[r.project] = (pTot[r.project] || 0) + r.totalTokens + (r.events || 0);
-    for (const s of D.sessions || [])
-      if ((agentSel === 'all' || s.agent === agentSel) && s.project && !hasOwn(pTot, s.project))
-        pTot[s.project] = s.totalTokens + (s.events || 0);
+      if (agentSel === 'all' || r.agent === agentSel) {
+        const k = projGroupOf(r.project);            // 下拉按归并后的项目列
+        pTot[k] = (pTot[k] || 0) + r.totalTokens + (r.events || 0);
+      }
+    for (const s of D.sessions || []) {
+      if (agentSel !== 'all' && s.agent !== agentSel) continue;
+      const k = projGroupOf(s.project);
+      if (s.project && !hasOwn(pTot, k)) pTot[k] = s.totalTokens + (s.events || 0);
+    }
     const pItems = Object.entries(pTot).sort((a, b) => b[1] - a[1]).map(([n]) => [n, n]);
     if (!fillSelect(projSelEl, projSel, [['all', S.allProjects], ...pItems])) {
       projSel = 'all'; projSelEl.value = 'all'; reset = true;
@@ -1466,7 +1524,7 @@
       const day = (s.lastActivity || '').slice(0, 10);
       if (day && (day < rangeStart || day > rangeEnd)) return false;
       if (agentSel !== 'all' && s.agent !== agentSel) return false;
-      if (projSel !== 'all' && s.project !== projSel) return false;
+      if (projSel !== 'all' && projGroupOf(s.project) !== projSel) return false;
       if (selModel !== 'all' && !(s.modelsUsed || []).some(modelMatch)) return false;
       return true;
     }).length;
@@ -1733,7 +1791,7 @@
     (D.sessions || []).forEach(s => {
       const day = (s.lastActivity || '').slice(0, 10);
       if (day && (day < rangeStart || day > rangeEnd)) return;
-      if (projSel !== 'all' && s.project !== projSel) return;
+      if (projSel !== 'all' && projGroupOf(s.project) !== projSel) return;
       if (selModel !== 'all' && !(s.modelsUsed || []).some(modelMatch)) return;
       sessCount[s.agent] = (sessCount[s.agent] || 0) + 1;
     });
@@ -1772,11 +1830,11 @@
     for (const r of rawProjDaily) {
       if (!inRange(r.date)) continue;
       if (agentSel !== 'all' && r.agent !== agentSel) continue;
-      if (projSel !== 'all' && r.project !== projSel) continue;
+      if (projSel !== 'all' && projGroupOf(r.project) !== projSel) continue;
       const mbs = selModel === 'all' ? (r.modelBreakdowns || [])
         : (r.modelBreakdowns || []).filter(mb => modelMatch(mb.modelName));
       if (selModel !== 'all' && !mbs.length) continue;
-      const p = agg[r.project] = agg[r.project] || { tot: 0, ev: 0, cost: 0, hc: false, est: 0, he: false, days: new Set(), agents: new Set(), sess: 0 };
+      const p = agg[projGroupOf(r.project)] = agg[projGroupOf(r.project)] || { tot: 0, ev: 0, cost: 0, hc: false, est: 0, he: false, days: new Set(), agents: new Set(), sess: 0 };
       p.ev += r.events || 0;
       p.days.add(r.date); p.agents.add(r.agent);
       if (selModel === 'all') {
@@ -1794,18 +1852,19 @@
     for (const s of D.sessions || []) {
       if (!s.project) continue;
       if (agentSel !== 'all' && s.agent !== agentSel) continue;
-      if (projSel !== 'all' && s.project !== projSel) continue;
+      if (projSel !== 'all' && projGroupOf(s.project) !== projSel) continue;
       if (selModel !== 'all' && !(s.modelsUsed || []).some(modelMatch)) continue;
       const day = (s.lastActivity || '').slice(0, 10);
       if (day && !inRange(day)) continue;          // 范围外会话不产生行
-      let p = agg[s.project];
+      const gname = projGroupOf(s.project);
+      let p = agg[gname];
       if (!p) {
         if (!day) continue;                        // 无法判断归属范围，不建空行
-        p = agg[s.project] = { tot: 0, ev: 0, cost: 0, hc: false, est: 0, he: false, days: new Set(), agents: new Set(), sess: 0 };
+        p = agg[gname] = { tot: 0, ev: 0, cost: 0, hc: false, est: 0, he: false, days: new Set(), agents: new Set(), sess: 0 };
       }
       p.sess++;
       p.agents.add(s.agent);
-      if (!dailyPairs.has(s.agent + '\u0000' + s.project)) {
+      if (!dailyPairs.has(s.agent + '\u0000' + projGroupOf(s.project))) {
         // 无项目级日粒度的来源用会话总量近似。注意近似行的日期只有"最后活动日"
         // 可用（会话没记起始日），因此它不代表项目真实的起始时间，也不该参与
         // firstDate —— 见 rebuildView 里 firstDate 的注释。总量本身跨多天时，
@@ -2058,7 +2117,7 @@
   // 不再是独立卡片：点项目行展开该项目的会话，口径与项目表的「会话」列一致
   function projSessions(name) {
     return (D.sessions || []).filter(s => {
-      if (s.project !== name) return false;
+      if (projGroupOf(s.project) !== name) return false;
       if (agentSel !== 'all' && s.agent !== agentSel) return false;
       if (selModel !== 'all' && !(s.modelsUsed || []).some(modelMatch)) return false;
       // 跟随时间范围：与 Agent 表的"会话"列同口径（按最后活动日归属范围）。
@@ -2301,7 +2360,7 @@
     const p = q.get('p'), s = q.get('s'), e = q.get('e'), a = q.get('a');
     if (a && AGENTS[a]) agentSel = a;
     if (q.get('m')) selModel = q.get('m');
-    if (q.get('pj')) projSel = q.get('pj');
+    if (q.get('pj')) projSel = projGroupOf(q.get('pj'));   // 允许传组内任一种写法
     const validISO = ds => {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(ds)) return false;
       const [y, m, d] = ds.split('-').map(Number);

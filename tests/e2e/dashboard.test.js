@@ -140,7 +140,7 @@ describe('筛选与状态', () => {
       return [...document.querySelectorAll('#projTable tbody tr.proj-expand .sess-row')].length;
     `);
     const countAt = (query) => withPage(async (page) => {
-      await page.click('#projTable tbody tr[data-proj="proj-a"]');
+      await page.click('#projTable tbody tr[data-proj="Projects/proj-a"]');
       assert.equal(await page.eval("return document.body.innerText.includes('{n}')"), false,
         '展开按钮不应残留 {n} 模板');
       return expandedSessions(page);
@@ -276,13 +276,13 @@ describe('筛选与状态', () => {
 
       const row = await page.eval(`
         const tr = [...document.querySelectorAll('#projTable tbody tr')]
-          .find(r => r.dataset.proj === 'proj-a');
+          .find(r => r.dataset.proj === 'Projects/proj-a');
         return tr ? { sess: tr.children[4].textContent.trim(),
                       tot: tr.children[5].textContent.trim() } : null;
       `);
       assert.ok(row, '应有 proj-a 这一行');
 
-      await page.click('#projTable tbody tr[data-proj="proj-a"]');
+      await page.click('#projTable tbody tr[data-proj="Projects/proj-a"]');
       assert.equal(await page.count('#projTable tbody tr.proj-expand'), 1,
         '点击后应出现该项目的展开区');
       const sessRows = await page.count('#projTable tbody tr.proj-expand .sess-row');
@@ -290,7 +290,7 @@ describe('筛选与状态', () => {
         `展开区的会话数(${sessRows}) 应等于该行「会话」列(${row.sess})`);
 
       // 再点一次收起
-      await page.click('#projTable tbody tr[data-proj="proj-a"]');
+      await page.click('#projTable tbody tr[data-proj="Projects/proj-a"]');
       assert.equal(await page.count('#projTable tbody tr.proj-expand'), 0, '再点应收起');
     }, '?p=all');
   });
@@ -302,6 +302,37 @@ describe('筛选与状态', () => {
       assert.equal(await page.eval(
         "return document.body.innerText.includes('会话明细')"), false,
         '不应残留「会话明细」标题');
+    }, '?p=all');
+  });
+
+  test('同一项目的不同写法合并成一行（跨来源命名差异）', async () => {
+    // 真实案例：Desktop/trading-logic（dimcode/devin）、~/desktop-trading-logic
+    // （commandcode）、trading-logic（antigravity）本是同一个项目。
+    // fixture 里 proj-a 与 ~/proj-a 同理，必须合并而不是各占一行。
+    await withPage(async (page) => {
+      const rows = await page.eval(`
+        return [...document.querySelectorAll('#projTable tbody tr.pj-row')]
+          .map(r => ({ proj: r.dataset.proj, sess: r.children[4].textContent.trim() }))
+          .filter(r => /proj-a$/i.test(r.proj));
+      `);
+      assert.equal(rows.length, 1,
+        `同一项目应只占一行，实际 ${JSON.stringify(rows)}`);
+      // 代表名取"像路径"的写法，而不是扁平化/只剩末段的名
+      assert.equal(rows[0].proj, 'Projects/proj-a',
+        `代表名应为 Projects/proj-a，实际 ${rows[0].proj}`);
+      // proj-a 自身 2 条（s-multi / s-today）+ Projects/proj-a 1 条
+      assert.equal(rows[0].sess, '3',
+        `会话数应为合并后的 3，实际 ${rows[0].sess}`);
+
+      // 展开后，两种写法的会话都该在里面
+      await page.click(`#projTable tbody tr[data-proj="${rows[0].proj}"]`);
+      const ids = await page.eval(`
+        return [...document.querySelectorAll('#projTable tbody tr.proj-expand .sess-id')]
+          .map(e => e.getAttribute('title'));
+      `);
+      assert.equal(ids.length, 3, `展开区应有 3 条会话，实际 ${ids.length}`);
+      assert.ok(ids.includes('s-proj-a-alt'),
+        `另一种写法的会话也应在展开区里：${JSON.stringify(ids)}`);
     }, '?p=all');
   });
 
